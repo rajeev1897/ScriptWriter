@@ -1,0 +1,37 @@
+<template>
+  <div class="main-bg">
+    <header class="header">
+      <div class="name">Rajeev <span class="highlight">Yogeshwara</span></div>
+      <nav class="nav">
+    <a href="/Resume/s/" class="nav-link active">Home</a>
+    <a href="/Resume/s/skills" class="nav-link">Skills</a>
+    <a href="/Resume/s/certifications" class="nav-link">Certifications</a>
+    <a href="/Resume/s/projects" class="nav-link">Projects</a>
+      </nav>
+    </header>
+    <section class="intro">
+      <!-- Image removed as requested -->
+      <div class="intro-text" onmouseover={handleIntroHover} onmouseout={handleIntroOut}>
+        <span class="intro-main" id="introMain">Hello, I'm <span class="highlight">Rajeev Yogeshwara</span>, Lead Consultant</span>
+  <span class="intro-alt" id="introAlt">Certified Salesforce Professional with 6+ years of expertise in software design, development, and implementation of enterprise applications on the Salesforce platform. Proven ability to manage large-scale projects, coordinate diverse teams, and deliver high-quality releases on time. Experienced in Community Cloud, Apex, Lightning Web Components (LWC), and Salesforce integrations, with a strong track record of aligning technology with business strategy.</span>
+      </div>
+    </section>
+    <footer class="footer">
+      <div class="contact">
+        <div>E: <a href="mailto:rajeev.yogeshwara97@gmail.com" class="footer-email">rajeev.yogeshwara97@gmail.com</a></div>
+        <div>T: +91 9704117967</div>
+      </div>
+      <div class="headline">
+        <div class="animated-headline" onmouseover={handleHeadlineHover} onmouseout={handleHeadlineOut}>
+            <span class="headline-main" id="headlineMain">{animatedHeadline}</span>
+          <!-- <span class="headline-alt">In Salesforce</span> -->
+        </div>
+      </div>
+      <div class="social">
+            <a href="https://www.linkedin.com/in/rajeev-y-43341416a" class="icon" target="_blank" title="LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="2" y="2" width="20" height="20" rx="4" ry="4"></rect><line x1="8" y1="11" x2="8" y2="16"></line><line x1="8" y1="8" x2="8" y2="8"></line><line x1="12" y1="16" x2="12" y2="11"></line><path d="M16 16v-3a2 2 0 0 0-4 0"></path></svg>
+          </a>
+      </div>
+    </footer>
+  </div>
+</template>

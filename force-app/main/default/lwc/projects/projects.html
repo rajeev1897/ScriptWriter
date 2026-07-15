@@ -1,0 +1,22 @@
+<template>
+  <div class="projects-bg">
+    <c-header></c-header>
+    <section class="projects-section">
+      <div class="projects-center">
+        <div class="projects-title">Projects</div>
+        <div class="projects-grid">
+            <button class="nav-btn left" onclick={prevProject}>&lt;</button>
+            <div class="project-stack">
+              <div class="project-item">
+                <div class="project-title">{currentProject.title}</div>
+                <div class="project-desc">{currentProject.desc}</div>
+                
+              </div>
+            </div>
+            <button class="nav-btn right" onclick={nextProject}>&gt;</button>
+        </div>
+      </div>
+    </section>
+    <c-footer></c-footer>
+  </div>
+</template>

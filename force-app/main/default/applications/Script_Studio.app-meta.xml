@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Workspace for creating scripts, managing current documents, and reviewing saved versions.</description>
+    <formFactors>Large</formFactors>
+    <formFactors>Small</formFactors>
+    <label>Script Studio</label>
+    <navType>Standard</navType>
+    <tabs>standard-home</tabs>
+    <tabs>Script__c</tabs>
+    <tabs>Script_Document__c</tabs>
+    <tabs>Script_Version__c</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>
