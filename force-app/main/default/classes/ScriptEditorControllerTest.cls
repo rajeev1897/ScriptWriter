@@ -13,7 +13,7 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void firstSaveCreatesDocumentAndSnapshot() {
+  static void manualSaveCreatesDocumentAndSnapshot() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
 
     Test.startTest();
@@ -23,7 +23,8 @@ private class ScriptEditorControllerTest {
       '{"schemaVersion":1,"mode":"screenplay"}',
       2,
       1,
-      'screenplay'
+      'screenplay',
+      'Manual'
     );
     Test.stopTest();
 
@@ -50,7 +51,7 @@ private class ScriptEditorControllerTest {
     Assert.areEqual(document.Format_Metadata__c, version.Format_Metadata__c);
     Assert.areEqual(2, document.Word_Count__c);
     Assert.areEqual(1, document.Page_Count__c);
-    Assert.areEqual('Autosave', version.Source__c);
+    Assert.areEqual('Manual', version.Source__c);
     Assert.areEqual(response.savedAt, version.Saved_At__c);
     Assert.areEqual(response.savedAt, script.Last_Saved_At__c);
     Assert.areEqual('Screenplay', script.Type__c);
@@ -65,7 +66,8 @@ private class ScriptEditorControllerTest {
       '{"schemaVersion":1,"mode":"screenplay"}',
       2,
       1,
-      'screenplay'
+      'screenplay',
+      'Autosave'
     );
 
     Test.startTest();
@@ -75,7 +77,8 @@ private class ScriptEditorControllerTest {
       '{"schemaVersion":1,"mode":"synopsis"}',
       2,
       1,
-      'synopsis'
+      'synopsis',
+      'Manual'
     );
     Test.stopTest();
 
@@ -84,7 +87,7 @@ private class ScriptEditorControllerTest {
       [SELECT COUNT() FROM Script_Document__c WHERE Script__c = :script.Id]
     );
     Assert.areEqual(
-      2,
+      1,
       [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
     );
     Assert.areEqual(
@@ -111,7 +114,8 @@ private class ScriptEditorControllerTest {
       '{"schemaVersion":1,"mode":"screenplay"}',
       2,
       1,
-      'screenplay'
+      'screenplay',
+      'Autosave'
     );
 
     Test.startTest();
@@ -124,6 +128,10 @@ private class ScriptEditorControllerTest {
     Assert.areEqual('screenplay', response.mode);
     Assert.areEqual(FIRST_CONTENT, response.content);
     Assert.isNotNull(response.savedAt);
+    Assert.areEqual(
+      0,
+      [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
+    );
   }
 
   @IsTest

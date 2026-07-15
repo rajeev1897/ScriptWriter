@@ -1,5 +1,9 @@
 <template>
-  <section class="editor-shell" aria-label="Script editor">
+  <section
+    class="editor-shell"
+    aria-label="Script editor"
+    onkeydown={handleEditorKeyDown}
+  >
     <header class="editor-header">
       <div>
         <p class="eyebrow">Script editor</p>
@@ -14,6 +18,14 @@
             >{saveMessage}</span
           >
         </template>
+        <lightning-button
+          class="save-button"
+          label="Save version"
+          title="Save version (Ctrl+S or Command+S)"
+          variant="brand"
+          disabled={isSaveDisabled}
+          onclick={handleManualSave}
+        ></lightning-button>
         <lightning-combobox
           class="mode-picker"
           name="editorMode"

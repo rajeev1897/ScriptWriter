@@ -42,10 +42,20 @@ public with sharing class ScriptEditorController {
     String formatMetadata,
     Integer wordCount,
     Integer pageCount,
-    String mode
+    String mode,
+    String saveSource
   ) {
     validateScriptId(scriptId);
     validatePayload(content, formatMetadata, wordCount, pageCount, mode);
+    String normalizedSaveSource = String.isBlank(saveSource)
+      ? 'Autosave'
+      : saveSource;
+    if (
+      normalizedSaveSource != 'Autosave' &&
+      normalizedSaveSource != 'Manual'
+    ) {
+      throw handledException('The save source is not supported.');
+    }
 
     List<Script__c> scripts = [
       SELECT Id
@@ -87,19 +97,20 @@ public with sharing class ScriptEditorController {
       Database.update(document, AccessLevel.USER_MODE);
     }
 
-    Script_Version__c version = new Script_Version__c(
-      Script__c = scriptId,
-      Content__c = content,
-      Format_Metadata__c = formatMetadata,
-      Saved_At__c = savedAt,
-      Source__c = 'Autosave'
-    );
-    Database.insert(version, AccessLevel.USER_MODE);
-
     SaveResponse response = new SaveResponse();
     response.documentId = document.Id;
-    response.versionId = version.Id;
     response.savedAt = savedAt;
+    if (normalizedSaveSource == 'Manual') {
+      Script_Version__c version = new Script_Version__c(
+        Script__c = scriptId,
+        Content__c = content,
+        Format_Metadata__c = formatMetadata,
+        Saved_At__c = savedAt,
+        Source__c = 'Manual'
+      );
+      Database.insert(version, AccessLevel.USER_MODE);
+      response.versionId = version.Id;
+    }
     return response;
   }
 

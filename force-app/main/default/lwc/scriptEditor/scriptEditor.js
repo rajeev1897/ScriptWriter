@@ -51,7 +51,7 @@ export default class ScriptEditor extends LightningElement {
   revision = 0;
   autosaveTimer;
   saveInFlight = false;
-  trailingSaveRequested = false;
+  queuedSaveSource;
 
   modeOptions = [
     { label: "Screenplay", value: "screenplay" },
@@ -179,6 +179,10 @@ export default class ScriptEditor extends LightningElement {
     return this.saveState === "error";
   }
 
+  get isSaveDisabled() {
+    return !this.recordId || !this.isLoaded;
+  }
+
   connectedCallback() {
     this.isConnected = true;
     if (this.recordId) {
@@ -213,6 +217,21 @@ export default class ScriptEditor extends LightningElement {
   handleModeChange(event) {
     this.mode = event.detail.value;
     this.emitChange();
+  }
+
+  handleEditorKeyDown(event) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      this.handleManualSave();
+    }
+  }
+
+  handleManualSave() {
+    if (this.isSaveDisabled) {
+      return;
+    }
+    this.clearAutosaveTimer();
+    this.performSave("Manual");
   }
 
   handleBlockFocus(event) {
@@ -341,7 +360,7 @@ export default class ScriptEditor extends LightningElement {
   resetPersistenceState() {
     this.clearAutosaveTimer();
     this.isLoaded = false;
-    this.trailingSaveRequested = false;
+    this.queuedSaveSource = undefined;
     this.revision = 0;
     if (this.recordId) {
       this.saveState = "loading";
@@ -420,12 +439,18 @@ export default class ScriptEditor extends LightningElement {
   }
 
   async performAutosave() {
+    this.performSave("Autosave");
+  }
+
+  async performSave(saveSource) {
     this.autosaveTimer = undefined;
     if (!this.recordId || !this.isLoaded) {
       return;
     }
     if (this.saveInFlight) {
-      this.trailingSaveRequested = true;
+      if (saveSource === "Manual" || !this.queuedSaveSource) {
+        this.queuedSaveSource = saveSource;
+      }
       return;
     }
 
@@ -434,7 +459,7 @@ export default class ScriptEditor extends LightningElement {
     const content = this.value;
     this.saveInFlight = true;
     this.saveState = "saving";
-    this.saveMessage = "Saving…";
+    this.saveMessage = saveSource === "Manual" ? "Saving version…" : "Saving…";
 
     try {
       const result = await saveScript({
@@ -446,14 +471,15 @@ export default class ScriptEditor extends LightningElement {
         }),
         wordCount: this.wordCount,
         pageCount: this.wordCount === 0 ? 0 : Math.ceil(this.wordCount / 250),
-        mode: this.mode
+        mode: this.mode,
+        saveSource
       });
 
       if (recordId !== this.recordId) {
         return;
       }
       if (savedRevision === this.revision) {
-        this.showSavedStatus(result.savedAt);
+        this.showSavedStatus(result.savedAt, saveSource === "Manual");
       } else {
         this.saveState = "dirty";
         this.saveMessage = "Unsaved changes";
@@ -464,14 +490,15 @@ export default class ScriptEditor extends LightningElement {
       }
     } finally {
       this.saveInFlight = false;
-      if (this.trailingSaveRequested && this.recordId && this.isLoaded) {
-        this.trailingSaveRequested = false;
-        this.performAutosave();
+      if (this.queuedSaveSource && this.recordId && this.isLoaded) {
+        const queuedSaveSource = this.queuedSaveSource;
+        this.queuedSaveSource = undefined;
+        this.performSave(queuedSaveSource);
       }
     }
   }
 
-  showSavedStatus(savedAt) {
+  showSavedStatus(savedAt, versionCreated = false) {
     const savedDate = new Date(savedAt);
     const time = Number.isNaN(savedDate.getTime())
       ? ""
@@ -480,7 +507,8 @@ export default class ScriptEditor extends LightningElement {
           minute: "2-digit"
         });
     this.saveState = "saved";
-    this.saveMessage = time ? `Saved ${time}` : "Saved";
+    const label = versionCreated ? "Version saved" : "Saved";
+    this.saveMessage = time ? `${label} ${time}` : label;
   }
 
   showSaveError(error) {

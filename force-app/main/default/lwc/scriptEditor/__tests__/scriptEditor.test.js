@@ -167,12 +167,65 @@ describe("c-script-editor", () => {
       scriptId: "a01000000000001AAA",
       mode: "screenplay",
       wordCount: 4,
-      pageCount: 1
+      pageCount: 1,
+      saveSource: "Autosave"
     });
     expect(saveScript.mock.calls[0][0].content).toContain("INT. OFFICE - DAY");
     expect(
       element.shadowRoot.querySelector(".save-status").textContent
     ).toContain("Saved");
+  });
+
+  it("creates a manual version from the Save button", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: null,
+      savedAt: null
+    });
+    saveScript.mockResolvedValue({
+      savedAt: "2026-07-15T12:00:00.000Z",
+      versionId: "a03000000000001AAA"
+    });
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+
+    element.shadowRoot.querySelector(".save-button").click();
+    await flushPromises();
+
+    expect(saveScript).toHaveBeenCalledWith(
+      expect.objectContaining({ saveSource: "Manual" })
+    );
+    expect(
+      element.shadowRoot.querySelector(".save-status").textContent
+    ).toContain("Version saved");
+  });
+
+  it("creates a manual version with Ctrl+S", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: null,
+      savedAt: null
+    });
+    saveScript.mockResolvedValue({
+      savedAt: "2026-07-15T12:00:00.000Z",
+      versionId: "a03000000000001AAA"
+    });
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "s",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    element.shadowRoot.querySelector("textarea").dispatchEvent(shortcut);
+    await flushPromises();
+
+    expect(shortcut.defaultPrevented).toBe(true);
+    expect(saveScript).toHaveBeenCalledWith(
+      expect.objectContaining({ saveSource: "Manual" })
+    );
   });
 
   it("resets the autosave delay after another edit", async () => {
