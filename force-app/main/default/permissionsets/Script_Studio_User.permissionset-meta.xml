@@ -1,10 +1,15 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
     <applicationVisibilities>
         <application>Script_Studio</application>
         <visible>true</visible>
     </applicationVisibilities>
-    <description>Grants writers access to the Script Studio app and its script data.</description>
+    <classAccesses>
+        <apexClass>ScriptEditorController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description
+  >Grants writers access to the Script Studio app and its script data.</description>
     <fieldPermissions>
         <editable>true</editable>
         <field>Script__c.Last_Saved_At__c</field>
@@ -84,6 +89,10 @@
     </tabSettings>
     <tabSettings>
         <tab>Script_Version__c</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <tabSettings>
+        <tab>Script_Editor</tab>
         <visibility>Visible</visibility>
     </tabSettings>
 </PermissionSet>

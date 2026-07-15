@@ -6,6 +6,7 @@
     <label>Script Studio</label>
     <navType>Standard</navType>
     <tabs>standard-home</tabs>
+    <tabs>Script_Editor</tabs>
     <tabs>Script__c</tabs>
     <tabs>Script_Document__c</tabs>
     <tabs>Script_Version__c</tabs>

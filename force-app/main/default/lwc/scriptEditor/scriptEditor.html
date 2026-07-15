@@ -1,0 +1,106 @@
+<template>
+  <section class="editor-shell" aria-label="Script editor">
+    <header class="editor-header">
+      <div>
+        <p class="eyebrow">Script editor</p>
+        <h1>{scriptTitle}</h1>
+      </div>
+      <div class="header-actions">
+        <template lwc:if={hasSaveError}>
+          <span class={saveStatusClass} role="alert">{saveMessage}</span>
+        </template>
+        <template lwc:else>
+          <span class={saveStatusClass} role="status" aria-live="polite"
+            >{saveMessage}</span
+          >
+        </template>
+        <lightning-combobox
+          class="mode-picker"
+          name="editorMode"
+          label="Document type"
+          value={mode}
+          options={modeOptions}
+          onchange={handleModeChange}
+        ></lightning-combobox>
+      </div>
+    </header>
+
+    <template lwc:if={isScreenplay}>
+      <nav class="format-toolbar" aria-label="Screenplay block format">
+        <span class="toolbar-label">Format active block</span>
+        <template for:each={typeOptions} for:item="type">
+          <button
+            key={type.value}
+            class="format-button"
+            type="button"
+            data-type={type.value}
+            onclick={handleToolbarClick}
+          >
+            {type.label}
+          </button>
+        </template>
+      </nav>
+    </template>
+
+    <div class="editor-help">
+      <template lwc:if={isScreenplay}>
+        <span
+          >Enter adds the next block · Shift+Enter adds a line · Tab changes
+          format</span
+        >
+      </template>
+      <span>{wordCount} words · {blockCount} blocks</span>
+    </div>
+
+    <main class="page">
+      <div class="page-content">
+        <template for:each={blocks} for:item="block">
+          <article
+            key={block.id}
+            class={block.className}
+            data-id={block.id}
+            onclick={handleBlockFocus}
+          >
+            <div class="block-controls">
+              <template lwc:if={isScreenplay}>
+                <lightning-combobox
+                  variant="label-hidden"
+                  name="blockType"
+                  label="Block type"
+                  value={block.type}
+                  options={typeOptions}
+                  data-id={block.id}
+                  onchange={handleTypeChange}
+                ></lightning-combobox>
+              </template>
+              <button
+                class="delete-button"
+                type="button"
+                title="Delete block"
+                aria-label="Delete block"
+                data-id={block.id}
+                onclick={handleDeleteBlock}
+              >
+                ×
+              </button>
+            </div>
+            <span class="block-label">{block.label}</span>
+            <textarea
+              class="block-input"
+              data-id={block.id}
+              placeholder={block.placeholder}
+              aria-label={block.label}
+              onfocus={handleBlockFocus}
+              oninput={handleInput}
+              onkeydown={handleKeyDown}
+            ></textarea>
+          </article>
+        </template>
+
+        <button class="add-block" type="button" onclick={handleAddBlock}>
+          + Add block
+        </button>
+      </div>
+    </main>
+  </section>
+</template>
