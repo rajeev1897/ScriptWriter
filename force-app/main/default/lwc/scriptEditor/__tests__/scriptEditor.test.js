@@ -160,7 +160,8 @@ describe("c-script-editor", () => {
       savedAt: null
     });
     saveScript.mockResolvedValue({
-      savedAt: "2026-07-15T12:00:00.000Z"
+      savedAt: "2026-07-15T12:00:00.000Z",
+      blockIdMap: { 1: "a0B000000000001AAA" }
     });
     const element = createComponent(null, "a01000000000001AAA");
     await flushPromises();
@@ -183,9 +184,69 @@ describe("c-script-editor", () => {
       saveSource: "Autosave"
     });
     expect(saveScript.mock.calls[0][0].content).toContain("INT. OFFICE - DAY");
+    const dirtyBlocks = JSON.parse(saveScript.mock.calls[0][0].dirtyBlocks);
+    expect(dirtyBlocks).toHaveLength(1);
+    expect(dirtyBlocks[0]).toMatchObject({
+      id: "1",
+      type: "scene-heading",
+      value: "INT. OFFICE - DAY",
+      sequence: 1
+    });
+    expect(JSON.parse(saveScript.mock.calls[0][0].deletedBlockIds)).toEqual([]);
     expect(
       element.shadowRoot.querySelector(".save-status").textContent
     ).toContain("Saved");
+  });
+
+  it("autosaves only the dirty dialogue block after an edit", async () => {
+    jest.useFakeTimers();
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: JSON.stringify({
+        mode: "screenplay",
+        blocks: [
+          {
+            id: "a0B000000000001AAA",
+            type: "scene-heading",
+            value: "INT. OFFICE - DAY"
+          },
+          {
+            id: "a0B000000000002AAA",
+            type: "character",
+            value: "MORGAN"
+          },
+          {
+            id: "a0B000000000003AAA",
+            type: "dialogue",
+            value: "Hello"
+          }
+        ]
+      }),
+      savedAt: "2026-07-15T11:00:00.000Z"
+    });
+    saveScript.mockResolvedValue({
+      savedAt: "2026-07-15T12:00:00.000Z"
+    });
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+
+    const dialogue = element.shadowRoot.querySelectorAll("textarea")[2];
+    dialogue.value = "Ready when you are.";
+    dialogue.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    jest.advanceTimersByTime(5000);
+    await flushPromises();
+
+    expect(saveScript).toHaveBeenCalledTimes(1);
+    const dirtyBlocks = JSON.parse(saveScript.mock.calls[0][0].dirtyBlocks);
+    expect(dirtyBlocks).toEqual([
+      {
+        id: "a0B000000000003AAA",
+        type: "dialogue",
+        value: "Ready when you are.",
+        sequence: 3
+      }
+    ]);
+    expect(saveScript.mock.calls[0][0].saveSource).toBe("Autosave");
   });
 
   it("creates a manual version from the Save button", async () => {
@@ -207,6 +268,8 @@ describe("c-script-editor", () => {
     expect(saveScript).toHaveBeenCalledWith(
       expect.objectContaining({ saveSource: "Manual" })
     );
+    expect(saveScript.mock.calls[0][0].dirtyBlocks).toBeUndefined();
+    expect(saveScript.mock.calls[0][0].deletedBlockIds).toBeUndefined();
     expect(
       element.shadowRoot.querySelector(".save-status").textContent
     ).toContain("Version saved");
@@ -326,6 +389,31 @@ describe("c-script-editor", () => {
 
     expect(saveScript).toHaveBeenCalledTimes(2);
     expect(saveScript.mock.calls[1][0].content).toContain("Second");
+    const dirtyBlocks = JSON.parse(saveScript.mock.calls[1][0].dirtyBlocks);
+    expect(dirtyBlocks[0].value).toBe("Second");
+  });
+
+  it("preserves Salesforce block ids when loading a document", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: JSON.stringify({
+        mode: "screenplay",
+        blocks: [
+          {
+            id: "a0B000000000001AAA",
+            type: "action",
+            value: "She opens the door."
+          }
+        ]
+      }),
+      savedAt: "2026-07-15T11:00:00.000Z"
+    });
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+
+    expect(
+      element.shadowRoot.querySelector("textarea").getAttribute("data-id")
+    ).toBe("a0B000000000001AAA");
   });
 
   it("imports a plain text file into the editor", async () => {

@@ -38,12 +38,17 @@ const ENTER_NEXT_TYPE = {
   transition: "scene-heading"
 };
 
+function isPersistedBlockId(id) {
+  const value = String(id ?? "");
+  return value.length === 15 || value.length === 18;
+}
+
 export default class ScriptEditor extends LightningElement {
   mode = "screenplay";
   scriptTitle = "Untitled script";
-  activeBlockId = 1;
+  activeBlockId = "1";
   nextBlockId = 2;
-  blockData = [{ id: 1, type: "scene-heading", value: "" }];
+  blockData = [{ id: "1", type: "scene-heading", value: "" }];
   saveState = "unavailable";
   saveMessage = "Open a script record to enable autosave";
   pdfUrl;
@@ -55,6 +60,8 @@ export default class ScriptEditor extends LightningElement {
   autosaveTimer;
   saveInFlight = false;
   queuedSaveSource;
+  dirtyBlockIds = new Set();
+  deletedBlockIds = [];
 
   modeOptions = [
     { label: "Screenplay", value: "screenplay" },
@@ -129,15 +136,27 @@ export default class ScriptEditor extends LightningElement {
 
       this.mode = document.mode === "synopsis" ? "synopsis" : "screenplay";
       this.blockData = blocks.map((block, index) => ({
-        id: index + 1,
+        id: block.id == null ? String(index + 1) : String(block.id),
         type: TYPE_BY_VALUE[block.type] ? block.type : "action",
         value: String(block.value ?? "")
       }));
-      this.activeBlockId = 1;
-      this.nextBlockId = this.blockData.length + 1;
+      this.activeBlockId = this.blockData[0].id;
+      this.nextBlockId = this.nextTempBlockId();
+      this.clearDirtyTracking();
     } catch {
       // Keep the current document when a consumer supplies invalid JSON.
     }
+  }
+
+  nextTempBlockId() {
+    let highest = 0;
+    this.blockData.forEach((block) => {
+      const asNumber = Number(block.id);
+      if (Number.isInteger(asNumber) && asNumber > highest) {
+        highest = asNumber;
+      }
+    });
+    return Math.max(highest + 1, this.nextBlockId);
   }
 
   get blocks() {
@@ -203,7 +222,7 @@ export default class ScriptEditor extends LightningElement {
       .querySelectorAll("textarea.block-input")
       .forEach((textarea) => {
         const block = this.blockData.find(
-          (item) => item.id === Number(textarea.dataset.id)
+          (item) => String(item.id) === String(textarea.dataset.id)
         );
         if (block && textarea.value !== block.value) {
           textarea.value = block.value;
@@ -219,6 +238,7 @@ export default class ScriptEditor extends LightningElement {
 
   handleModeChange(event) {
     this.mode = event.detail.value;
+    this.markAllBlocksDirty();
     this.emitChange();
   }
 
@@ -329,21 +349,22 @@ export default class ScriptEditor extends LightningElement {
   }
 
   handleBlockFocus(event) {
-    this.activeBlockId = Number(event.currentTarget.dataset.id);
+    this.activeBlockId = String(event.currentTarget.dataset.id);
   }
 
   handleInput(event) {
-    const id = Number(event.target.dataset.id);
+    const id = String(event.target.dataset.id);
     const value = event.target.value;
     this.blockData = this.blockData.map((block) => {
-      return block.id === id ? { ...block, value } : block;
+      return String(block.id) === id ? { ...block, value } : block;
     });
+    this.markBlocksDirty([id]);
     this.autoGrow(event.target);
     this.emitChange();
   }
 
   handleTypeChange(event) {
-    this.setBlockType(Number(event.target.dataset.id), event.detail.value);
+    this.setBlockType(String(event.target.dataset.id), event.detail.value);
   }
 
   handleToolbarClick(event) {
@@ -353,7 +374,7 @@ export default class ScriptEditor extends LightningElement {
 
   handleAddBlock() {
     const activeIndex = this.blockData.findIndex(
-      (block) => block.id === this.activeBlockId
+      (block) => String(block.id) === String(this.activeBlockId)
     );
     const currentType = this.blockData[activeIndex]?.type ?? "action";
     this.insertBlockAfter(activeIndex, ENTER_NEXT_TYPE[currentType]);
@@ -361,12 +382,14 @@ export default class ScriptEditor extends LightningElement {
 
   handleDeleteBlock(event) {
     event.stopPropagation();
-    this.removeBlock(Number(event.currentTarget.dataset.id));
+    this.removeBlock(String(event.currentTarget.dataset.id));
   }
 
   handleKeyDown(event) {
-    const id = Number(event.target.dataset.id);
-    const index = this.blockData.findIndex((block) => block.id === id);
+    const id = String(event.target.dataset.id);
+    const index = this.blockData.findIndex(
+      (block) => String(block.id) === id
+    );
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -395,14 +418,20 @@ export default class ScriptEditor extends LightningElement {
     if (!TYPE_BY_VALUE[type]) {
       return;
     }
+    const blockId = String(id);
     this.blockData = this.blockData.map((block) => {
-      return block.id === id ? { ...block, type } : block;
+      return String(block.id) === blockId ? { ...block, type } : block;
     });
+    this.markBlocksDirty([blockId]);
     this.emitChange();
   }
 
   insertBlockAfter(index, type = "action") {
-    const newBlock = { id: this.nextBlockId++, type, value: "" };
+    const newBlock = {
+      id: String(this.nextBlockId++),
+      type,
+      value: ""
+    };
     const insertAt = index < 0 ? this.blockData.length : index + 1;
     this.blockData = [
       ...this.blockData.slice(0, insertAt),
@@ -410,6 +439,8 @@ export default class ScriptEditor extends LightningElement {
       ...this.blockData.slice(insertAt)
     ];
     this.activeBlockId = newBlock.id;
+    // Insert shifts sequences for following blocks.
+    this.markAllBlocksDirty();
     this.emitChange();
     this.focusBlock(newBlock.id);
   }
@@ -418,10 +449,21 @@ export default class ScriptEditor extends LightningElement {
     if (this.blockData.length === 1) {
       return;
     }
-    const index = this.blockData.findIndex((block) => block.id === id);
-    this.blockData = this.blockData.filter((block) => block.id !== id);
+    const blockId = String(id);
+    const index = this.blockData.findIndex(
+      (block) => String(block.id) === blockId
+    );
+    this.blockData = this.blockData.filter(
+      (block) => String(block.id) !== blockId
+    );
+    this.dirtyBlockIds.delete(blockId);
+    if (isPersistedBlockId(blockId)) {
+      this.deletedBlockIds = [...this.deletedBlockIds, blockId];
+    }
     const focusIndex = Math.max(0, index - 1);
     this.activeBlockId = this.blockData[focusIndex].id;
+    // Delete shifts sequences for remaining blocks.
+    this.markAllBlocksDirty();
     this.emitChange();
     this.focusBlock(this.activeBlockId);
   }
@@ -456,12 +498,74 @@ export default class ScriptEditor extends LightningElement {
     this.isLoaded = false;
     this.queuedSaveSource = undefined;
     this.revision = 0;
+    this.clearDirtyTracking();
     if (this.recordId) {
       this.saveState = "loading";
       this.saveMessage = "Loading…";
     } else {
       this.saveState = "unavailable";
       this.saveMessage = "Open a script record to enable autosave";
+    }
+  }
+
+  clearDirtyTracking() {
+    this.dirtyBlockIds = new Set();
+    this.deletedBlockIds = [];
+  }
+
+  markBlocksDirty(ids) {
+    ids.forEach((id) => {
+      if (id != null) {
+        this.dirtyBlockIds.add(String(id));
+      }
+    });
+  }
+
+  markAllBlocksDirty() {
+    this.markBlocksDirty(this.blockData.map((block) => block.id));
+  }
+
+  buildDirtyBlocksPayload() {
+    return this.blockData
+      .map((block, index) => ({
+        id: String(block.id),
+        type: block.type,
+        value: block.value,
+        sequence: index + 1
+      }))
+      .filter((block) => this.dirtyBlockIds.has(block.id));
+  }
+
+  applyBlockIdMap(blockIdMap) {
+    if (!blockIdMap || typeof blockIdMap !== "object") {
+      return;
+    }
+
+    const entries = Object.entries(blockIdMap);
+    if (entries.length === 0) {
+      return;
+    }
+
+    const idMap = new Map(
+      entries.map(([clientId, serverId]) => [
+        String(clientId),
+        String(serverId)
+      ])
+    );
+
+    this.blockData = this.blockData.map((block) => {
+      const mappedId = idMap.get(String(block.id));
+      return mappedId ? { ...block, id: mappedId } : block;
+    });
+
+    const remappedDirty = new Set();
+    this.dirtyBlockIds.forEach((id) => {
+      remappedDirty.add(idMap.get(String(id)) || String(id));
+    });
+    this.dirtyBlockIds = remappedDirty;
+
+    if (idMap.has(String(this.activeBlockId))) {
+      this.activeBlockId = idMap.get(String(this.activeBlockId));
     }
   }
 
@@ -552,12 +656,25 @@ export default class ScriptEditor extends LightningElement {
     const recordId = this.recordId;
     const savedRevision = this.revision;
     const content = this.value;
+    const isAutosave = saveSource === "Autosave";
+    const dirtyBlocksPayload = isAutosave ? this.buildDirtyBlocksPayload() : [];
+    const deletedSnapshot = isAutosave ? [...this.deletedBlockIds] : [];
+    const dirtySnapshotIds = dirtyBlocksPayload.map((block) => block.id);
+
+    if (
+      isAutosave &&
+      dirtyBlocksPayload.length === 0 &&
+      deletedSnapshot.length === 0
+    ) {
+      return;
+    }
+
     this.saveInFlight = true;
     this.saveState = "saving";
     this.saveMessage = saveSource === "Manual" ? "Saving version…" : "Saving…";
 
     try {
-      const result = await saveScript({
+      const saveRequest = {
         scriptId: recordId,
         content,
         formatMetadata: JSON.stringify({
@@ -568,7 +685,14 @@ export default class ScriptEditor extends LightningElement {
         pageCount: this.wordCount === 0 ? 0 : Math.ceil(this.wordCount / 250),
         mode: this.mode,
         saveSource
-      });
+      };
+
+      if (isAutosave) {
+        saveRequest.dirtyBlocks = JSON.stringify(dirtyBlocksPayload);
+        saveRequest.deletedBlockIds = JSON.stringify(deletedSnapshot);
+      }
+
+      const result = await saveScript(saveRequest);
 
       if (recordId !== this.recordId) {
         return;
@@ -576,6 +700,30 @@ export default class ScriptEditor extends LightningElement {
       if (result?.pdfUrl) {
         this.pdfUrl = result.pdfUrl;
       }
+
+      this.applyBlockIdMap(result?.blockIdMap);
+
+      if (isAutosave) {
+        const deletedSet = new Set(deletedSnapshot.map(String));
+        this.deletedBlockIds = this.deletedBlockIds.filter(
+          (id) => !deletedSet.has(String(id))
+        );
+        // Only clear dirty flags when nothing changed during the request.
+        // Otherwise keep remapped dirty ids for the trailing autosave.
+        if (savedRevision === this.revision) {
+          dirtySnapshotIds.forEach((id) => {
+            const mappedId =
+              result?.blockIdMap?.[id] != null
+                ? String(result.blockIdMap[id])
+                : String(id);
+            this.dirtyBlockIds.delete(String(id));
+            this.dirtyBlockIds.delete(mappedId);
+          });
+        }
+      } else if (savedRevision === this.revision) {
+        this.clearDirtyTracking();
+      }
+
       if (savedRevision === this.revision) {
         this.showSavedStatus(
           result.savedAt,
