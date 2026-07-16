@@ -333,4 +333,46 @@ private class ScriptBlockPersistenceServiceTest {
     Assert.areEqual('KITCHEN', scene.Location__c);
     Assert.areEqual('MORNING', scene.Time_Of_Day__c);
   }
+
+  @IsTest
+  static void loadOrMigrateCreatesBlocksFromLegacyDocumentOnce() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    insert new Script_Document__c(
+      Script__c = script.Id,
+      Storage_Mode__c = 'Legacy',
+      Content__c = MULTI_SCENE_CONTENT
+    );
+
+    Test.startTest();
+    String first = ScriptBlockPersistenceService.loadOrMigrateWorkingContent(
+      script.Id,
+      'screenplay'
+    );
+    String second = ScriptBlockPersistenceService.loadOrMigrateWorkingContent(
+      script.Id,
+      'screenplay'
+    );
+    Test.stopTest();
+
+    Assert.isTrue(first.contains('INT. OFFICE - DAY'));
+    Assert.areEqual(first, second);
+    Assert.areEqual(
+      4,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      2,
+      [SELECT COUNT() FROM Script_Scene__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      'Migrated',
+      [
+          SELECT Storage_Mode__c
+          FROM Script_Document__c
+          WHERE Script__c = :script.Id
+          LIMIT 1
+        ]
+        .Storage_Mode__c
+    );
+  }
 }

@@ -1,5 +1,7 @@
 # Script Block Model — Sequential Agents
 
+**Status: Complete** (Agents 01–05 deployed on `feature/script-block-model`)
+
 Run these **one at a time**. After each agent finishes:
 
 1. Review the diff
@@ -13,13 +15,13 @@ Use: `feature/script-block-model`
 
 ## Agents (in order)
 
-| # | File | What it builds | Deploy after? |
-|---|------|----------------|---------------|
-| 01 | [01-data-model.md](01-data-model.md) | `Script_Scene__c`, `Script_Block__c`, fields, permissions, tabs | Yes |
-| 02 | [02-apex-persistence.md](02-apex-persistence.md) | Scene/block Apex services + controller save/load | Yes |
-| 03 | [03-lwc-dirty-autosave.md](03-lwc-dirty-autosave.md) | LWC dirty-block tracking + 5s partial autosave | Yes |
-| 04 | [04-version-import-export.md](04-version-import-export.md) | Manual version snapshots + txt/PDF aligned to blocks | Yes |
-| 05 | [05-migration-tests.md](05-migration-tests.md) | Legacy→blocks migration, tests, cleanup | Yes |
+| # | File | What it builds | Deploy after? | Status |
+|---|------|----------------|---------------|--------|
+| 01 | [01-data-model.md](01-data-model.md) | `Script_Scene__c`, `Script_Block__c`, fields, permissions, tabs | Yes | Done |
+| 02 | [02-apex-persistence.md](02-apex-persistence.md) | Scene/block Apex services + controller save/load | Yes | Done |
+| 03 | [03-lwc-dirty-autosave.md](03-lwc-dirty-autosave.md) | LWC dirty-block tracking + 5s partial autosave | Yes | Done |
+| 04 | [04-version-import-export.md](04-version-import-export.md) | Manual version snapshots + txt/PDF aligned to blocks | Yes | Done |
+| 05 | [05-migration-tests.md](05-migration-tests.md) | Legacy→blocks migration, tests, cleanup | Yes | Done |
 
 ## How to start an agent
 
@@ -38,9 +40,17 @@ Script__c
   └─ Script_Version__c (metadata only + Content_Version_Id__c → ContentVersion snapshot)
 ```
 
+### Source of truth
+
+| Concern | Where it lives |
+|---------|----------------|
+| Working script text (read + write) | `Script_Scene__c` / `Script_Block__c` |
+| Manual / Import / Export snapshots | `Script_Version__c` → `ContentVersion` JSON |
+| Pre-migration File/Legacy bodies | `Script_Document__c` (kept as backup; `Storage_Mode__c = Migrated` after lazy migrate on open) |
+
 - Autosave: update **dirty** `Script_Block__c` rows only; bump `Script__c.Last_Saved_At__c`; no version.
 - Manual save / Cmd+S: build JSON snapshot → `ContentVersion` → `Script_Version__c` pointer.
-- Keep existing File-backed `Script_Document__c` readable until Agent 05 migrates.
+- Opening a script with File/Legacy content and no blocks runs a one-time migrate into scenes/blocks.
 
 ### Block_Type__c ↔ LWC `SCREENPLAY_TYPES`
 
@@ -56,7 +66,7 @@ Script__c
 ## Current baseline (do not regress)
 
 - LWC: `force-app/main/default/lwc/scriptEditor/`
-- Apex: `ScriptEditorController`, `ScriptDocumentStorageService`, `ScriptImportExportService`, `ScriptPdfController`
-- Objects: `Script__c`, `Script_Document__c`, `Script_Version__c`
+- Apex: `ScriptEditorController`, `ScriptBlockPersistenceService`, `ScriptDocumentStorageService`, `ScriptImportExportService`, `ScriptPdfController`
+- Objects: `Script__c`, `Script_Scene__c`, `Script_Block__c`, `Script_Document__c`, `Script_Version__c`
 - Org alias: `personalDev`
 - Remote: `origin` → `ScriptWriter`

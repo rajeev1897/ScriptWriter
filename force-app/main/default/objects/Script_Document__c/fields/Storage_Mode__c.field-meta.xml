@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Storage_Mode__c</fullName>
     <description
-  >Whether the working script body is stored in a Long Text Area or a Salesforce File.</description>
+  >Legacy/File working storage, or Migrated after scenes/blocks were created from that backup.</description>
     <label>Storage Mode</label>
     <required>false</required>
     <trackTrending>false</trackTrending>
@@ -20,6 +20,11 @@
                 <fullName>File</fullName>
                 <default>false</default>
                 <label>File</label>
+            </value>
+            <value>
+                <fullName>Migrated</fullName>
+                <default>false</default>
+                <label>Migrated</label>
             </value>
         </valueSetDefinition>
     </valueSet>

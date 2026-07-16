@@ -24,27 +24,24 @@ public with sharing class ScriptEditorController {
     response.savedAt = scripts[0].Last_Saved_At__c;
     response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
 
-    if (ScriptBlockPersistenceService.hasBlocks(scriptId)) {
-      response.content = ScriptBlockPersistenceService.loadDocument(scriptId);
-      return response;
-    }
+    response.content = ScriptBlockPersistenceService.loadOrMigrateWorkingContent(
+      scriptId,
+      response.mode
+    );
 
-    List<Script_Document__c> documents = [
-      SELECT
-        Content__c,
-        Content_Document_Id__c,
-        Storage_Mode__c,
-        Format_Metadata__c
-      FROM Script_Document__c
-      WHERE Script__c = :scriptId
+    List<Script__c> refreshed = [
+      SELECT Last_Saved_At__c, Type__c
+      FROM Script__c
+      WHERE Id = :scriptId
       WITH USER_MODE
-      ORDER BY LastModifiedDate DESC
       LIMIT 1
     ];
-
-    response.content = documents.isEmpty()
-      ? null
-      : ScriptDocumentStorageService.readWorkingContent(documents[0]);
+    if (!refreshed.isEmpty()) {
+      response.mode = refreshed[0].Type__c == 'Synopsis'
+        ? 'synopsis'
+        : 'screenplay';
+      response.savedAt = refreshed[0].Last_Saved_At__c;
+    }
     return response;
   }
 

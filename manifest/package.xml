@@ -6,6 +6,7 @@
         <members>ScriptEditorController</members>
         <members>ScriptEditorControllerTest</members>
         <members>ScriptDocumentStorageService</members>
+        <members>ScriptDocumentStorageServiceTest</members>
         <members>ScriptImportExportService</members>
         <members>ScriptImportExportServiceTest</members>
         <members>ScriptPdfController</members>

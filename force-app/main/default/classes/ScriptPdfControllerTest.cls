@@ -39,7 +39,7 @@ private class ScriptPdfControllerTest {
   }
 
   @IsTest
-  static void fallsBackToFileDocumentWhenNoBlocks() {
+  static void migratesFileDocumentWhenNoBlocks() {
     Script__c script = new Script__c(
       Name = 'Legacy PDF Script',
       Type__c = 'Screenplay',
@@ -67,5 +67,18 @@ private class ScriptPdfControllerTest {
     Assert.areEqual('Legacy PDF Script', controller.title);
     Assert.areEqual(1, controller.blocks.size());
     Assert.areEqual('Legacy line.', controller.blocks[0].value);
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      'Migrated',
+      [
+          SELECT Storage_Mode__c
+          FROM Script_Document__c
+          WHERE Id = :document.Id
+        ]
+        .Storage_Mode__c
+    );
   }
 }

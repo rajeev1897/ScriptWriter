@@ -28,24 +28,10 @@ public with sharing class ScriptPdfController {
     title = scripts[0].Name;
     mode = scripts[0].Type__c == 'Synopsis' ? 'synopsis' : 'screenplay';
 
-    String content;
-    if (ScriptBlockPersistenceService.hasBlocks(scriptId)) {
-      content = ScriptBlockPersistenceService.loadDocument(scriptId);
-    } else {
-      List<Script_Document__c> documents = [
-        SELECT Content__c, Content_Document_Id__c, Storage_Mode__c
-        FROM Script_Document__c
-        WHERE Script__c = :scriptId
-        WITH USER_MODE
-        ORDER BY LastModifiedDate DESC
-        LIMIT 1
-      ];
-      if (documents.isEmpty()) {
-        return;
-      }
-      content = ScriptDocumentStorageService.readWorkingContent(documents[0]);
-    }
-
+    String content = ScriptBlockPersistenceService.loadOrMigrateWorkingContent(
+      scriptId,
+      mode
+    );
     if (String.isBlank(content)) {
       return;
     }

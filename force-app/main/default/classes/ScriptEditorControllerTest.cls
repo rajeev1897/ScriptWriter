@@ -158,7 +158,7 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void loadReturnsFileBackedDocumentWhenNoBlocks() {
+  static void loadMigratesFileBackedDocumentOnFirstOpen() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
 
     Script_Document__c document = new Script_Document__c(
@@ -186,7 +186,107 @@ private class ScriptEditorControllerTest {
 
     Assert.areEqual('Autosave Test', response.title);
     Assert.areEqual('screenplay', response.mode);
-    Assert.areEqual(FIRST_CONTENT, response.content);
+    Assert.isTrue(response.content.contains('First draft'));
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      'Migrated',
+      [
+          SELECT Storage_Mode__c
+          FROM Script_Document__c
+          WHERE Id = :document.Id
+        ]
+        .Storage_Mode__c
+    );
+    Assert.isNotNull(
+      [
+          SELECT Content_Document_Id__c
+          FROM Script_Document__c
+          WHERE Id = :document.Id
+        ]
+        .Content_Document_Id__c
+    );
+
+    ScriptEditorController.LoadResponse secondLoad = ScriptEditorController.loadScript(
+      script.Id
+    );
+    Assert.areEqual(response.content, secondLoad.content);
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+  }
+
+  @IsTest
+  static void loadMigratesLegacyContentFieldOnly() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    insert new Script_Document__c(
+      Script__c = script.Id,
+      Storage_Mode__c = 'Legacy',
+      Content__c = SCENE_CONTENT,
+      Word_Count__c = 4,
+      Page_Count__c = 1
+    );
+
+    Test.startTest();
+    ScriptEditorController.LoadResponse response = ScriptEditorController.loadScript(
+      script.Id
+    );
+    Test.stopTest();
+
+    Assert.isTrue(response.content.contains('INT. OFFICE - DAY'));
+    Assert.areEqual(
+      2,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Scene__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      'Migrated',
+      [
+          SELECT Storage_Mode__c
+          FROM Script_Document__c
+          WHERE Script__c = :script.Id
+          LIMIT 1
+        ]
+        .Storage_Mode__c
+    );
+  }
+
+  @IsTest
+  static void loadDoesNotMigrateWhenDocumentHasNoContent() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    insert new Script_Document__c(
+      Script__c = script.Id,
+      Storage_Mode__c = 'Legacy',
+      Content__c = null
+    );
+
+    Test.startTest();
+    ScriptEditorController.LoadResponse response = ScriptEditorController.loadScript(
+      script.Id
+    );
+    Test.stopTest();
+
+    Assert.isNull(response.content);
+    Assert.areEqual(
+      0,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      'Legacy',
+      [
+          SELECT Storage_Mode__c
+          FROM Script_Document__c
+          WHERE Script__c = :script.Id
+          LIMIT 1
+        ]
+        .Storage_Mode__c
+    );
   }
 
   @IsTest

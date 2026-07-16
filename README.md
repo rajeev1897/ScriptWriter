@@ -1,18 +1,17 @@
-# Salesforce DX Project: Next Steps
+# PersonalDev — Script Studio
 
-Now that you’ve created a Salesforce DX project, what’s next? Here are some documentation resources to get you started.
+Salesforce DX project for Script Studio (screenplay / synopsis editor).
 
-## How Do You Plan to Deploy Your Changes?
+## Script text source of truth
 
-Do you want to deploy a set of changes, or create a self-contained application? Choose a [development model](https://developer.salesforce.com/tools/vscode/en/user-guide/development-models).
+- **Working content:** `Script_Scene__c` and `Script_Block__c` (read and write).
+- **Version snapshots:** `Script_Version__c` points at a `ContentVersion` JSON file (manual save, import, export).
+- **Legacy:** Older `Script_Document__c` File/Long Text bodies migrate into scenes/blocks on first open; the document row is marked `Migrated` and kept as backup.
 
-## Configure Your Salesforce DX Project
+See [docs/agents/script-block-model/README.md](docs/agents/script-block-model/README.md) for the full scene/block model notes.
 
-The `sfdx-project.json` file contains useful configuration information for your project. See [Salesforce DX Project Configuration](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_ws_config.htm) in the _Salesforce DX Developer Guide_ for details about this file.
+## Salesforce DX
 
-## Read All About It
-
-- [Salesforce Extensions Documentation](https://developer.salesforce.com/tools/vscode/)
-- [Salesforce CLI Setup Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_setup.meta/sfdx_setup/sfdx_setup_intro.htm)
-- [Salesforce DX Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_intro.htm)
-- [Salesforce CLI Command Reference](https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/sfdx_cli_reference/cli_reference.htm)
+- Configure the project via `sfdx-project.json` ([Salesforce DX Project Configuration](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_ws_config.htm)).
+- Org alias used for this work: `personalDev`.
+- Feature branch for the block model: `feature/script-block-model`.

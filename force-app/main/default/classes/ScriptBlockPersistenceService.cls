@@ -117,6 +117,77 @@ public with sharing class ScriptBlockPersistenceService {
   }
 
   /**
+   * Loads working editor JSON from scenes/blocks when present.
+   * Otherwise reads File/Legacy Script_Document__c content, migrates it into
+   * scenes/blocks once, marks the document Migrated, and returns block JSON.
+   */
+  public static String loadOrMigrateWorkingContent(Id scriptId, String mode) {
+    if (scriptId == null) {
+      return null;
+    }
+    if (hasBlocks(scriptId)) {
+      return loadDocument(scriptId);
+    }
+
+    List<Script_Document__c> documents = [
+      SELECT
+        Id,
+        Content__c,
+        Content_Document_Id__c,
+        Storage_Mode__c,
+        Format_Metadata__c
+      FROM Script_Document__c
+      WHERE Script__c = :scriptId
+      WITH USER_MODE
+      ORDER BY LastModifiedDate DESC
+      LIMIT 1
+    ];
+    if (documents.isEmpty()) {
+      return null;
+    }
+
+    String legacyContent = ScriptDocumentStorageService.readWorkingContent(
+      documents[0]
+    );
+    if (String.isBlank(legacyContent)) {
+      return null;
+    }
+
+    String normalizedMode = mode == 'synopsis' ? 'synopsis' : 'screenplay';
+    try {
+      Map<String, Object> document = (Map<String, Object>) JSON.deserializeUntyped(
+        legacyContent
+      );
+      if (document != null && document.get('mode') != null) {
+        String documentMode = String.valueOf(document.get('mode'));
+        if (documentMode == 'synopsis' || documentMode == 'screenplay') {
+          normalizedMode = documentMode;
+        }
+      }
+    } catch (Exception ignored) {
+      // Keep mode from Script__c when legacy JSON is not an editor document.
+    }
+
+    persistFullDocument(scriptId, legacyContent, normalizedMode);
+    markDocumentMigrated(documents[0]);
+    return loadDocument(scriptId);
+  }
+
+  private static void markDocumentMigrated(Script_Document__c document) {
+    if (document == null || document.Id == null) {
+      return;
+    }
+    if (document.Storage_Mode__c == 'Migrated') {
+      return;
+    }
+    Script_Document__c updateRow = new Script_Document__c(
+      Id = document.Id,
+      Storage_Mode__c = 'Migrated'
+    );
+    Database.update(updateRow, AccessLevel.USER_MODE);
+  }
+
+  /**
    * Builds a schemaVersion 3 JSON snapshot from persisted scenes/blocks
    * for ContentVersion versioning. Flat blocks remain for editor compatibility.
    */
