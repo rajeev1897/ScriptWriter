@@ -126,4 +126,39 @@ private class ScriptDocumentStorageServiceTest {
     Assert.isTrue(version.PathOnClient.endsWith('.txt'));
     Assert.areEqual('INT. OFFICE - DAY', version.VersionData.toString());
   }
+
+  @IsTest
+  static void writePdfFileCreatesPdfContentVersion() {
+    Script__c script = new Script__c(
+      Name = 'PDF File Script',
+      Type__c = 'Screenplay',
+      Status__c = 'Draft'
+    );
+    insert script;
+
+    Blob pdfBody = Blob.valueOf('%PDF-1.4 mock');
+
+    Test.startTest();
+    Id versionId = ScriptDocumentStorageService.writePdfFile(
+      script.Id,
+      'Export Draft',
+      pdfBody
+    );
+    String downloadUrl = ScriptDocumentStorageService.contentVersionDownloadUrl(
+      versionId
+    );
+    Test.stopTest();
+
+    ContentVersion version = [
+      SELECT PathOnClient, VersionData
+      FROM ContentVersion
+      WHERE Id = :versionId
+    ];
+    Assert.isTrue(version.PathOnClient.endsWith('.pdf'));
+    Assert.areEqual('%PDF-1.4 mock', version.VersionData.toString());
+    Assert.isTrue(
+      downloadUrl.contains('/sfc/servlet.shepherd/version/download/')
+    );
+    Assert.isNull(ScriptDocumentStorageService.contentVersionDownloadUrl(null));
+  }
 }

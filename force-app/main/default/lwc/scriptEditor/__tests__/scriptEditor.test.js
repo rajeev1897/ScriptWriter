@@ -5,6 +5,7 @@ import loadScript from "@salesforce/apex/ScriptEditorController.loadScript";
 import saveScript from "@salesforce/apex/ScriptEditorController.saveScript";
 import importPlainText from "@salesforce/apex/ScriptEditorController.importPlainText";
 import exportPlainText from "@salesforce/apex/ScriptEditorController.exportPlainText";
+import exportPdf from "@salesforce/apex/ScriptEditorController.exportPdf";
 
 jest.mock(
   "@salesforce/apex/ScriptEditorController.loadScript",
@@ -23,6 +24,11 @@ jest.mock(
 );
 jest.mock(
   "@salesforce/apex/ScriptEditorController.exportPlainText",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ScriptEditorController.exportPdf",
   () => ({ default: jest.fn() }),
   { virtual: true }
 );
@@ -488,5 +494,34 @@ describe("c-script-editor", () => {
     expect(createObjectURL).toHaveBeenCalled();
     expect(click).toHaveBeenCalled();
     click.mockRestore();
+  });
+
+  it("downloads PDF through export and opens the file URL", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: null,
+      savedAt: null,
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA"
+    });
+    exportPdf.mockResolvedValue({
+      fileName: "Test script.pdf",
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA",
+      downloadUrl: "/sfc/servlet.shepherd/version/download/068000000000001AAA"
+    });
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+    element.shadowRoot.querySelector(".download-pdf-button").click();
+    await flushPromises();
+
+    expect(exportPdf).toHaveBeenCalledWith({
+      scriptId: "a01000000000001AAA"
+    });
+    expect(open).toHaveBeenCalledWith(
+      "/sfc/servlet.shepherd/version/download/068000000000001AAA",
+      "_blank"
+    );
+    open.mockRestore();
   });
 });

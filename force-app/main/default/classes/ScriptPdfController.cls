@@ -49,19 +49,37 @@ public with sharing class ScriptPdfController {
       }
       for (Object rawBlock : rawBlocks) {
         Map<String, Object> block = (Map<String, Object>) rawBlock;
-        BlockView view = new BlockView();
-        view.blockType = block.get('type') == null
-          ? 'action'
-          : String.valueOf(block.get('type'));
-        view.value = block.get('value') == null
+        String value = block.get('value') == null
           ? ''
           : String.valueOf(block.get('value'));
+        if (String.isBlank(value)) {
+          continue;
+        }
+        BlockView view = new BlockView();
+        view.blockType = normalizeBlockType(
+          block.get('type') == null ? null : String.valueOf(block.get('type'))
+        );
+        view.value = value;
         view.cssClass = 'block block-' + view.blockType;
         blocks.add(view);
       }
     } catch (Exception ignored) {
       // Leave empty when content is invalid.
     }
+  }
+
+  private static String normalizeBlockType(String blockType) {
+    if (
+      blockType == 'scene-heading' ||
+      blockType == 'action' ||
+      blockType == 'character' ||
+      blockType == 'dialogue' ||
+      blockType == 'parenthetical' ||
+      blockType == 'transition'
+    ) {
+      return blockType;
+    }
+    return 'action';
   }
 
   public class BlockView {
