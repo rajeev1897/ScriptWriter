@@ -13,14 +13,14 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void manualSaveCreatesDocumentAndSnapshot() {
+  static void manualSaveCreatesFileBackedDocumentAndSnapshot() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
 
     Test.startTest();
     ScriptEditorController.SaveResponse response = ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":1,"mode":"screenplay"}',
+      '{"schemaVersion":2,"mode":"screenplay"}',
       2,
       1,
       'screenplay',
@@ -29,41 +29,48 @@ private class ScriptEditorControllerTest {
     Test.stopTest();
 
     Script_Document__c document = [
-      SELECT Content__c, Format_Metadata__c, Word_Count__c, Page_Count__c
+      SELECT
+        Content__c,
+        Content_Document_Id__c,
+        Storage_Mode__c,
+        Format_Metadata__c,
+        Word_Count__c,
+        Page_Count__c
       FROM Script_Document__c
       WHERE Script__c = :script.Id
     ];
     Script_Version__c version = [
-      SELECT Content__c, Format_Metadata__c, Saved_At__c, Source__c
+      SELECT
+        Content__c,
+        Content_Version_Id__c,
+        Format_Metadata__c,
+        Saved_At__c,
+        Source__c
       FROM Script_Version__c
       WHERE Script__c = :script.Id
-    ];
-    script = [
-      SELECT Last_Saved_At__c, Type__c
-      FROM Script__c
-      WHERE Id = :script.Id
     ];
 
     Assert.areEqual(document.Id, response.documentId);
     Assert.areEqual(version.Id, response.versionId);
-    Assert.areEqual(FIRST_CONTENT, document.Content__c);
-    Assert.areEqual(document.Content__c, version.Content__c);
-    Assert.areEqual(document.Format_Metadata__c, version.Format_Metadata__c);
+    Assert.areEqual('File', document.Storage_Mode__c);
+    Assert.isNotNull(document.Content_Document_Id__c);
+    Assert.areEqual(
+      FIRST_CONTENT,
+      ScriptDocumentStorageService.readWorkingContent(document)
+    );
+    Assert.isNotNull(version.Content_Version_Id__c);
+    Assert.areEqual('Manual', version.Source__c);
     Assert.areEqual(2, document.Word_Count__c);
     Assert.areEqual(1, document.Page_Count__c);
-    Assert.areEqual('Manual', version.Source__c);
-    Assert.areEqual(response.savedAt, version.Saved_At__c);
-    Assert.areEqual(response.savedAt, script.Last_Saved_At__c);
-    Assert.areEqual('Screenplay', script.Type__c);
   }
 
   @IsTest
-  static void laterSaveUpdatesDocumentAndCreatesSnapshot() {
+  static void autosaveDoesNotCreateVersionButUpdatesWorkingFile() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
     ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":1,"mode":"screenplay"}',
+      '{"schemaVersion":2,"mode":"screenplay"}',
       2,
       1,
       'screenplay',
@@ -74,30 +81,27 @@ private class ScriptEditorControllerTest {
     ScriptEditorController.saveScript(
       script.Id,
       SECOND_CONTENT,
-      '{"schemaVersion":1,"mode":"synopsis"}',
+      '{"schemaVersion":2,"mode":"synopsis"}',
       2,
       1,
       'synopsis',
-      'Manual'
+      'Autosave'
     );
     Test.stopTest();
 
-    Assert.areEqual(
-      1,
-      [SELECT COUNT() FROM Script_Document__c WHERE Script__c = :script.Id]
-    );
-    Assert.areEqual(
-      1,
-      [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
-    );
+    Script_Document__c document = [
+      SELECT Content_Document_Id__c, Storage_Mode__c
+      FROM Script_Document__c
+      WHERE Script__c = :script.Id
+    ];
+    Assert.areEqual('File', document.Storage_Mode__c);
     Assert.areEqual(
       SECOND_CONTENT,
-      [
-        SELECT Content__c
-        FROM Script_Document__c
-        WHERE Script__c = :script.Id
-      ]
-      .Content__c
+      ScriptDocumentStorageService.readWorkingContent(document)
+    );
+    Assert.areEqual(
+      0,
+      [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
     );
     Assert.areEqual(
       'Synopsis',
@@ -106,12 +110,12 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void loadReturnsCurrentDocument() {
+  static void loadReturnsFileBackedDocument() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
     ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":1,"mode":"screenplay"}',
+      '{"schemaVersion":2,"mode":"screenplay"}',
       2,
       1,
       'screenplay',
@@ -127,10 +131,65 @@ private class ScriptEditorControllerTest {
     Assert.areEqual('Autosave Test', response.title);
     Assert.areEqual('screenplay', response.mode);
     Assert.areEqual(FIRST_CONTENT, response.content);
-    Assert.isNotNull(response.savedAt);
+    Assert.isTrue(response.pdfUrl.contains('/apex/ScriptPdf?id='));
+  }
+
+  @IsTest
+  static void importPlainTextCreatesWorkingFileAndVersion() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    String plainText = 'INT. OFFICE - DAY\n\nMORGAN\nHello there.';
+
+    Test.startTest();
+    ScriptEditorController.SaveResponse response = ScriptEditorController.importPlainText(
+      script.Id,
+      plainText,
+      'draft.txt',
+      'screenplay'
+    );
+    Test.stopTest();
+
+    Assert.isNotNull(response.documentId);
+    Assert.isNotNull(response.versionId);
+    Assert.isTrue(response.content.contains('INT. OFFICE - DAY'));
     Assert.areEqual(
-      0,
-      [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
+      1,
+      [
+        SELECT COUNT()
+        FROM Script_Version__c
+        WHERE Script__c = :script.Id AND Source__c = 'Import'
+      ]
+    );
+  }
+
+  @IsTest
+  static void exportPlainTextCreatesDownloadableSnapshot() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    ScriptEditorController.saveScript(
+      script.Id,
+      FIRST_CONTENT,
+      '{"schemaVersion":2,"mode":"screenplay"}',
+      2,
+      1,
+      'screenplay',
+      'Autosave'
+    );
+
+    Test.startTest();
+    ScriptEditorController.ExportResponse response = ScriptEditorController.exportPlainText(
+      script.Id
+    );
+    Test.stopTest();
+
+    Assert.areEqual('Autosave Test.txt', response.fileName);
+    Assert.isTrue(response.plainText.contains('First draft'));
+    Assert.isNotNull(response.contentVersionId);
+    Assert.areEqual(
+      1,
+      [
+        SELECT COUNT()
+        FROM Script_Version__c
+        WHERE Script__c = :script.Id AND Source__c = 'Export'
+      ]
     );
   }
 

@@ -1,0 +1,66 @@
+<apex:page
+  controller="ScriptPdfController"
+  renderAs="pdf"
+  applyHtmlTag="false"
+  applyBodyTag="false"
+  showHeader="false"
+  standardStylesheets="false"
+>
+  <html>
+    <head>
+      <style>
+        @page {
+          size: letter;
+          margin: 1in 1in 1in 1.5in;
+        }
+        body {
+          font-family: "Courier New", Courier, monospace;
+          font-size: 12pt;
+          line-height: 1.2;
+          color: #000;
+        }
+        h1 {
+          font-size: 16pt;
+          text-align: center;
+          margin: 0 0 24pt;
+        }
+        .block {
+          margin: 0 0 12pt;
+          white-space: pre-wrap;
+        }
+        .block-scene-heading {
+          text-transform: uppercase;
+          margin-top: 24pt;
+        }
+        .block-character {
+          text-transform: uppercase;
+          margin-left: 2.2in;
+          width: 2.5in;
+        }
+        .block-dialogue {
+          margin-left: 1in;
+          width: 3.5in;
+        }
+        .block-parenthetical {
+          margin-left: 1.6in;
+          width: 2.5in;
+        }
+        .block-transition {
+          text-align: right;
+          text-transform: uppercase;
+        }
+        .synopsis .block {
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 12pt;
+          line-height: 1.5;
+        }
+      </style>
+    </head>
+    <body class="{!IF(mode == 'synopsis', 'synopsis', 'screenplay')}">
+      <h1>{!title}</h1>
+      <apex:repeat value="{!blocks}" var="block">
+        <div class="{!block.cssClass}">{!block.value}</div>
+      </apex:repeat>
+    </body>
+  </html>
+</apex:page>

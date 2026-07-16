@@ -18,14 +18,37 @@
             >{saveMessage}</span
           >
         </template>
-        <lightning-button
-          class="save-button"
-          label="Save version"
-          title="Save version (Ctrl+S or Command+S)"
-          variant="brand"
-          disabled={isSaveDisabled}
-          onclick={handleManualSave}
-        ></lightning-button>
+        <div class="action-buttons">
+          <lightning-button
+            class="upload-button"
+            label="Upload .txt"
+            title="Import a plain text script"
+            disabled={isSaveDisabled}
+            onclick={handleUploadClick}
+          ></lightning-button>
+          <lightning-button
+            class="download-txt-button"
+            label="Download .txt"
+            title="Download the script as plain text"
+            disabled={isSaveDisabled}
+            onclick={handleDownloadTxt}
+          ></lightning-button>
+          <lightning-button
+            class="download-pdf-button"
+            label="Download PDF"
+            title="Download a screenplay-formatted PDF"
+            disabled={isSaveDisabled}
+            onclick={handleDownloadPdf}
+          ></lightning-button>
+          <lightning-button
+            class="save-button"
+            label="Save version"
+            title="Save version (Ctrl+S or Command+S)"
+            variant="brand"
+            disabled={isSaveDisabled}
+            onclick={handleManualSave}
+          ></lightning-button>
+        </div>
         <lightning-combobox
           class="mode-picker"
           name="editorMode"
@@ -36,6 +59,13 @@
         ></lightning-combobox>
       </div>
     </header>
+
+    <input
+      class="upload-input"
+      type="file"
+      accept=".txt,text/plain"
+      onchange={handleFileSelected}
+    />
 
     <template lwc:if={isScreenplay}>
       <nav class="format-toolbar" aria-label="Screenplay block format">
@@ -58,7 +88,7 @@
       <template lwc:if={isScreenplay}>
         <span
           >Enter adds the next block · Shift+Enter adds a line · Tab changes
-          format</span
+          format · Upload .txt or download PDF/TXT</span
         >
       </template>
       <span>{wordCount} words · {blockCount} blocks</span>

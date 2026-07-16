@@ -3,7 +3,16 @@
     <types>
         <members>ScriptEditorController</members>
         <members>ScriptEditorControllerTest</members>
+        <members>ScriptDocumentStorageService</members>
+        <members>ScriptImportExportService</members>
+        <members>ScriptImportExportServiceTest</members>
+        <members>ScriptPdfController</members>
+        <members>ScriptPdfControllerTest</members>
         <name>ApexClass</name>
+    </types>
+    <types>
+        <members>ScriptPdf</members>
+        <name>ApexPage</name>
     </types>
     <types>
         <members>Script_Studio</members>
@@ -14,11 +23,14 @@
         <members>Script__c.Status__c</members>
         <members>Script__c.Type__c</members>
         <members>Script_Document__c.Content__c</members>
+        <members>Script_Document__c.Content_Document_Id__c</members>
         <members>Script_Document__c.Format_Metadata__c</members>
         <members>Script_Document__c.Page_Count__c</members>
         <members>Script_Document__c.Script__c</members>
+        <members>Script_Document__c.Storage_Mode__c</members>
         <members>Script_Document__c.Word_Count__c</members>
         <members>Script_Version__c.Content__c</members>
+        <members>Script_Version__c.Content_Version_Id__c</members>
         <members>Script_Version__c.Format_Metadata__c</members>
         <members>Script_Version__c.Saved_At__c</members>
         <members>Script_Version__c.Script__c</members>

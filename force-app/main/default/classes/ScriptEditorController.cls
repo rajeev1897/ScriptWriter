@@ -1,7 +1,7 @@
 public with sharing class ScriptEditorController {
-  private static final Integer LONG_TEXT_LIMIT = 131072;
+  private static final Integer FORMAT_METADATA_LIMIT = 131072;
 
-  @AuraEnabled(cacheable=true)
+  @AuraEnabled
   public static LoadResponse loadScript(Id scriptId) {
     validateScriptId(scriptId);
 
@@ -17,7 +17,11 @@ public with sharing class ScriptEditorController {
     }
 
     List<Script_Document__c> documents = [
-      SELECT Content__c
+      SELECT
+        Content__c,
+        Content_Document_Id__c,
+        Storage_Mode__c,
+        Format_Metadata__c
       FROM Script_Document__c
       WHERE Script__c = :scriptId
       WITH USER_MODE
@@ -31,7 +35,10 @@ public with sharing class ScriptEditorController {
       ? 'synopsis'
       : 'screenplay';
     response.savedAt = scripts[0].Last_Saved_At__c;
-    response.content = documents.isEmpty() ? null : documents[0].Content__c;
+    response.content = documents.isEmpty()
+      ? null
+      : ScriptDocumentStorageService.readWorkingContent(documents[0]);
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
     return response;
   }
 
@@ -47,18 +54,10 @@ public with sharing class ScriptEditorController {
   ) {
     validateScriptId(scriptId);
     validatePayload(content, formatMetadata, wordCount, pageCount, mode);
-    String normalizedSaveSource = String.isBlank(saveSource)
-      ? 'Autosave'
-      : saveSource;
-    if (
-      normalizedSaveSource != 'Autosave' &&
-      normalizedSaveSource != 'Manual'
-    ) {
-      throw handledException('The save source is not supported.');
-    }
+    String normalizedSaveSource = normalizeSaveSource(saveSource);
 
     List<Script__c> scripts = [
-      SELECT Id
+      SELECT Id, Name
       FROM Script__c
       WHERE Id = :scriptId
       WITH USER_MODE
@@ -76,7 +75,7 @@ public with sharing class ScriptEditorController {
     Database.update(script, AccessLevel.USER_MODE);
 
     List<Script_Document__c> documents = [
-      SELECT Id
+      SELECT Id, Content_Document_Id__c, Storage_Mode__c
       FROM Script_Document__c
       WHERE Script__c = :scriptId
       WITH USER_MODE
@@ -87,31 +86,174 @@ public with sharing class ScriptEditorController {
     Script_Document__c document = documents.isEmpty()
       ? new Script_Document__c(Script__c = scriptId)
       : documents[0];
-    document.Content__c = content;
-    document.Format_Metadata__c = formatMetadata;
-    document.Word_Count__c = wordCount;
-    document.Page_Count__c = pageCount;
+
     if (document.Id == null) {
-      Database.insert(document, AccessLevel.USER_MODE);
+      document.Storage_Mode__c = 'File';
+      document.Format_Metadata__c = formatMetadata;
+      document.Word_Count__c = wordCount;
+      document.Page_Count__c = pageCount;
+      document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
+        content
+      );
+      Database.insert(document, AccessLevel.SYSTEM_MODE);
+      Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
+        document.Id,
+        null,
+        script.Name + ' Working Draft',
+        content
+      );
+      document.Content_Document_Id__c = contentDocumentId;
+      Database.update(document, AccessLevel.SYSTEM_MODE);
     } else {
-      Database.update(document, AccessLevel.USER_MODE);
+      Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
+        document.Id,
+        document.Content_Document_Id__c == null
+          ? null
+          : Id.valueOf(document.Content_Document_Id__c),
+        script.Name + ' Working Draft',
+        content
+      );
+      document.Content_Document_Id__c = contentDocumentId;
+      document.Storage_Mode__c = 'File';
+      document.Format_Metadata__c = formatMetadata;
+      document.Word_Count__c = wordCount;
+      document.Page_Count__c = pageCount;
+      document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
+        content
+      );
+      Database.update(document, AccessLevel.SYSTEM_MODE);
     }
 
     SaveResponse response = new SaveResponse();
     response.documentId = document.Id;
     response.savedAt = savedAt;
-    if (normalizedSaveSource == 'Manual') {
+    response.content = content;
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
+
+    if (
+      normalizedSaveSource == 'Manual' ||
+      normalizedSaveSource == 'Import' ||
+      normalizedSaveSource == 'Export'
+    ) {
+      Id snapshotVersionId = ScriptDocumentStorageService.writeSnapshotContent(
+        scriptId,
+        script.Name + ' ' + normalizedSaveSource + ' Snapshot',
+        content
+      );
       Script_Version__c version = new Script_Version__c(
         Script__c = scriptId,
-        Content__c = content,
+        Content__c = ScriptDocumentStorageService.truncateForLegacyField(
+          content
+        ),
         Format_Metadata__c = formatMetadata,
         Saved_At__c = savedAt,
-        Source__c = 'Manual'
+        Source__c = normalizedSaveSource,
+        Content_Version_Id__c = snapshotVersionId
       );
-      Database.insert(version, AccessLevel.USER_MODE);
+      Database.insert(version, AccessLevel.SYSTEM_MODE);
       response.versionId = version.Id;
+      response.contentVersionId = snapshotVersionId;
     }
+
     return response;
+  }
+
+  @AuraEnabled
+  public static SaveResponse importPlainText(
+    Id scriptId,
+    String plainText,
+    String fileName,
+    String mode
+  ) {
+    validateScriptId(scriptId);
+    String normalizedMode = mode == 'synopsis' ? 'synopsis' : 'screenplay';
+    ScriptImportExportService.ParsedDocument parsed = ScriptImportExportService.parsePlainText(
+      plainText,
+      normalizedMode
+    );
+    String content = ScriptImportExportService.toEditorJson(parsed);
+    Integer wordCount = ScriptImportExportService.countWords(content);
+    Integer pageCount = wordCount == 0
+      ? 0
+      : (Integer) Math.ceil(wordCount / 250.0);
+
+    if (String.isNotBlank(fileName)) {
+      ScriptDocumentStorageService.writeTextFile(
+        scriptId,
+        fileName.endsWith('.txt') ? fileName.replace('.txt', '') : fileName,
+        plainText == null ? '' : plainText
+      );
+    }
+
+    return saveScript(
+      scriptId,
+      content,
+      JSON.serialize(
+        new Map<String, Object>{
+          'schemaVersion' => 2,
+          'mode' => parsed.mode,
+          'storage' => 'File'
+        }
+      ),
+      wordCount,
+      pageCount,
+      parsed.mode,
+      'Import'
+    );
+  }
+
+  @AuraEnabled
+  public static ExportResponse exportPlainText(Id scriptId) {
+    validateScriptId(scriptId);
+    LoadResponse loaded = loadScript(scriptId);
+    String plainText = ScriptImportExportService.toPlainText(loaded.content);
+    String title = String.isBlank(loaded.title) ? 'Script' : loaded.title;
+    Id contentVersionId = ScriptDocumentStorageService.writeTextFile(
+      scriptId,
+      title + ' Export',
+      plainText
+    );
+
+    Script_Version__c version = new Script_Version__c(
+      Script__c = scriptId,
+      Content__c = ScriptDocumentStorageService.truncateForLegacyField(
+        loaded.content
+      ),
+      Format_Metadata__c = JSON.serialize(
+        new Map<String, Object>{
+          'schemaVersion' => 2,
+          'mode' => loaded.mode,
+          'exportType' => 'txt'
+        }
+      ),
+      Saved_At__c = System.now(),
+      Source__c = 'Export',
+      Content_Version_Id__c = contentVersionId
+    );
+    Database.insert(version, AccessLevel.SYSTEM_MODE);
+
+    ExportResponse response = new ExportResponse();
+    response.fileName = title + '.txt';
+    response.plainText = plainText;
+    response.contentVersionId = contentVersionId;
+    response.versionId = version.Id;
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
+    return response;
+  }
+
+  private static String normalizeSaveSource(String saveSource) {
+    String normalizedSaveSource = String.isBlank(saveSource)
+      ? 'Autosave'
+      : saveSource;
+    if (
+      normalizedSaveSource != 'Autosave' &&
+      normalizedSaveSource != 'Manual' &&
+      normalizedSaveSource != 'Import' &&
+      normalizedSaveSource != 'Export'
+    ) {
+      throw handledException('The save source is not supported.');
+    }
+    return normalizedSaveSource;
   }
 
   private static void validateScriptId(Id scriptId) {
@@ -134,11 +276,10 @@ public with sharing class ScriptEditorController {
       throw handledException('Script content is required.');
     }
     if (
-      content.length() > LONG_TEXT_LIMIT ||
-      (formatMetadata != null &&
-      formatMetadata.length() > LONG_TEXT_LIMIT)
+      formatMetadata != null &&
+      formatMetadata.length() > FORMAT_METADATA_LIMIT
     ) {
-      throw handledException('The script is too large to save.');
+      throw handledException('The script formatting metadata is too large.');
     }
     if (
       wordCount == null ||
@@ -168,6 +309,8 @@ public with sharing class ScriptEditorController {
     public String content { get; set; }
     @AuraEnabled
     public Datetime savedAt { get; set; }
+    @AuraEnabled
+    public String pdfUrl { get; set; }
   }
 
   public class SaveResponse {
@@ -176,6 +319,25 @@ public with sharing class ScriptEditorController {
     @AuraEnabled
     public Id versionId { get; set; }
     @AuraEnabled
+    public Id contentVersionId { get; set; }
+    @AuraEnabled
     public Datetime savedAt { get; set; }
+    @AuraEnabled
+    public String pdfUrl { get; set; }
+    @AuraEnabled
+    public String content { get; set; }
+  }
+
+  public class ExportResponse {
+    @AuraEnabled
+    public String fileName { get; set; }
+    @AuraEnabled
+    public String plainText { get; set; }
+    @AuraEnabled
+    public Id contentVersionId { get; set; }
+    @AuraEnabled
+    public Id versionId { get; set; }
+    @AuraEnabled
+    public String pdfUrl { get; set; }
   }
 }

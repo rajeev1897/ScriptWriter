@@ -2,6 +2,8 @@ import { api, LightningElement, wire } from "lwc";
 import { CurrentPageReference } from "lightning/navigation";
 import loadScript from "@salesforce/apex/ScriptEditorController.loadScript";
 import saveScript from "@salesforce/apex/ScriptEditorController.saveScript";
+import importPlainText from "@salesforce/apex/ScriptEditorController.importPlainText";
+import exportPlainText from "@salesforce/apex/ScriptEditorController.exportPlainText";
 
 const AUTOSAVE_DELAY = 5000;
 
@@ -44,6 +46,7 @@ export default class ScriptEditor extends LightningElement {
   blockData = [{ id: 1, type: "scene-heading", value: "" }];
   saveState = "unavailable";
   saveMessage = "Open a script record to enable autosave";
+  pdfUrl;
 
   _recordId;
   isConnected = false;
@@ -234,6 +237,97 @@ export default class ScriptEditor extends LightningElement {
     this.performSave("Manual");
   }
 
+  handleUploadClick() {
+    if (this.isSaveDisabled) {
+      return;
+    }
+    this.template.querySelector(".upload-input")?.click();
+  }
+
+  async handleFileSelected(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || this.isSaveDisabled) {
+      return;
+    }
+
+    this.saveState = "saving";
+    this.saveMessage = "Importing…";
+
+    try {
+      const plainText = await this.readFileAsText(file);
+      const result = await importPlainText({
+        scriptId: this.recordId,
+        plainText,
+        fileName: file.name,
+        mode: this.mode
+      });
+      if (result?.content) {
+        this.applyDocumentValue(result.content);
+      }
+      this.pdfUrl = result.pdfUrl || this.pdfUrl;
+      this.revision += 1;
+      this.showSavedStatus(result.savedAt, true);
+      this.saveMessage = "Imported and version saved";
+    } catch (error) {
+      this.showSaveError(error);
+    }
+  }
+
+  readFileAsText(file) {
+    if (typeof file.text === "function") {
+      return file.text();
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("Unable to read file"));
+      reader.readAsText(file);
+    });
+  }
+
+  async handleDownloadTxt() {
+    if (this.isSaveDisabled) {
+      return;
+    }
+
+    this.saveState = "saving";
+    this.saveMessage = "Preparing download…";
+
+    try {
+      const result = await exportPlainText({ scriptId: this.recordId });
+      this.pdfUrl = result.pdfUrl || this.pdfUrl;
+      this.downloadBrowserFile(
+        result.fileName || `${this.scriptTitle || "script"}.txt`,
+        result.plainText || "",
+        "text/plain"
+      );
+      this.saveState = "saved";
+      this.saveMessage = "Downloaded .txt";
+    } catch (error) {
+      this.showSaveError(error);
+    }
+  }
+
+  handleDownloadPdf() {
+    if (this.isSaveDisabled) {
+      return;
+    }
+    const url = this.pdfUrl || `/apex/ScriptPdf?id=${this.recordId}`;
+    window.open(url, "_blank");
+  }
+
+  downloadBrowserFile(fileName, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   handleBlockFocus(event) {
     this.activeBlockId = Number(event.currentTarget.dataset.id);
   }
@@ -384,6 +478,7 @@ export default class ScriptEditor extends LightningElement {
       }
 
       this.scriptTitle = result.title || "Untitled script";
+      this.pdfUrl = result.pdfUrl;
       if (this.revision === loadRevision && result.content) {
         this.applyDocumentValue(result.content);
       }
@@ -478,8 +573,14 @@ export default class ScriptEditor extends LightningElement {
       if (recordId !== this.recordId) {
         return;
       }
+      if (result?.pdfUrl) {
+        this.pdfUrl = result.pdfUrl;
+      }
       if (savedRevision === this.revision) {
-        this.showSavedStatus(result.savedAt, saveSource === "Manual");
+        this.showSavedStatus(
+          result.savedAt,
+          saveSource === "Manual" || saveSource === "Import"
+        );
       } else {
         this.saveState = "dirty";
         this.saveMessage = "Unsaved changes";

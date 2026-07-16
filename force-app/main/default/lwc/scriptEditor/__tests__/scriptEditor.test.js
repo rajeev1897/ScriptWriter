@@ -3,6 +3,8 @@ import { CurrentPageReference } from "lightning/navigation";
 import ScriptEditor from "c/scriptEditor";
 import loadScript from "@salesforce/apex/ScriptEditorController.loadScript";
 import saveScript from "@salesforce/apex/ScriptEditorController.saveScript";
+import importPlainText from "@salesforce/apex/ScriptEditorController.importPlainText";
+import exportPlainText from "@salesforce/apex/ScriptEditorController.exportPlainText";
 
 jest.mock(
   "@salesforce/apex/ScriptEditorController.loadScript",
@@ -11,6 +13,16 @@ jest.mock(
 );
 jest.mock(
   "@salesforce/apex/ScriptEditorController.saveScript",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ScriptEditorController.importPlainText",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ScriptEditorController.exportPlainText",
   () => ({ default: jest.fn() }),
   { virtual: true }
 );
@@ -314,5 +326,79 @@ describe("c-script-editor", () => {
 
     expect(saveScript).toHaveBeenCalledTimes(2);
     expect(saveScript.mock.calls[1][0].content).toContain("Second");
+  });
+
+  it("imports a plain text file into the editor", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: null,
+      savedAt: null,
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA"
+    });
+    importPlainText.mockResolvedValue({
+      savedAt: "2026-07-15T12:00:00.000Z",
+      content:
+        '{"mode":"screenplay","blocks":[{"id":1,"type":"scene-heading","value":"INT. OFFICE - DAY"}]}',
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA"
+    });
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+    const input = element.shadowRoot.querySelector(".upload-input");
+    const file = {
+      name: "draft.txt",
+      text: jest.fn().mockResolvedValue("INT. OFFICE - DAY")
+    };
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+
+    input.dispatchEvent(new CustomEvent("change"));
+    await flushPromises();
+    await flushPromises();
+
+    expect(importPlainText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scriptId: "a01000000000001AAA",
+        fileName: "draft.txt",
+        plainText: "INT. OFFICE - DAY"
+      })
+    );
+    expect(element.shadowRoot.querySelector("textarea").value).toBe(
+      "INT. OFFICE - DAY"
+    );
+  });
+
+  it("downloads plain text through export", async () => {
+    loadScript.mockResolvedValue({
+      title: "Test script",
+      content: null,
+      savedAt: null,
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA"
+    });
+    exportPlainText.mockResolvedValue({
+      fileName: "Test script.txt",
+      plainText: "INT. OFFICE - DAY",
+      pdfUrl: "/apex/ScriptPdf?id=a01000000000001AAA"
+    });
+    const createObjectURL = jest.fn(() => "blob:mock");
+    const revokeObjectURL = jest.fn();
+    global.URL.createObjectURL = createObjectURL;
+    global.URL.revokeObjectURL = revokeObjectURL;
+    const click = jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    const element = createComponent(null, "a01000000000001AAA");
+    await flushPromises();
+    element.shadowRoot.querySelector(".download-txt-button").click();
+    await flushPromises();
+
+    expect(exportPlainText).toHaveBeenCalledWith({
+      scriptId: "a01000000000001AAA"
+    });
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
   });
 });
