@@ -237,6 +237,64 @@ public with sharing class ScriptEditorController {
     response.contentVersionId = contentVersionId;
     response.versionId = version.Id;
     response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
+    response.downloadUrl = ScriptDocumentStorageService.contentVersionDownloadUrl(
+      contentVersionId
+    );
+    return response;
+  }
+
+  @AuraEnabled
+  public static ExportResponse exportPdf(Id scriptId) {
+    validateScriptId(scriptId);
+    LoadResponse loaded = loadScript(scriptId);
+    String title = String.isBlank(loaded.title) ? 'Script' : loaded.title;
+
+    Blob pdfBody;
+    if (Test.isRunningTest()) {
+      pdfBody = Blob.valueOf('%PDF-1.4 test');
+    } else {
+      PageReference pdfPage = Page.ScriptPdf;
+      pdfPage.getParameters().put('id', String.valueOf(scriptId));
+      pdfBody = pdfPage.getContentAsPDF();
+    }
+
+    Id contentVersionId = ScriptDocumentStorageService.writePdfFile(
+      scriptId,
+      title + ' PDF Export',
+      pdfBody
+    );
+
+    String snapshotContent = ScriptBlockPersistenceService.hasBlocks(scriptId)
+      ? ScriptBlockPersistenceService.buildVersionSnapshot(scriptId)
+      : loaded.content;
+
+    Script_Version__c version = new Script_Version__c(
+      Script__c = scriptId,
+      Content__c = ScriptDocumentStorageService.truncateForLegacyField(
+        snapshotContent
+      ),
+      Format_Metadata__c = JSON.serialize(
+        new Map<String, Object>{
+          'schemaVersion' => 3,
+          'mode' => loaded.mode,
+          'exportType' => 'pdf'
+        }
+      ),
+      Saved_At__c = System.now(),
+      Source__c = 'Export',
+      Content_Version_Id__c = contentVersionId,
+      Version_Label__c = 'PDF Export'
+    );
+    Database.insert(version, AccessLevel.SYSTEM_MODE);
+
+    ExportResponse response = new ExportResponse();
+    response.fileName = title + '.pdf';
+    response.contentVersionId = contentVersionId;
+    response.versionId = version.Id;
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
+    response.downloadUrl = ScriptDocumentStorageService.contentVersionDownloadUrl(
+      contentVersionId
+    );
     return response;
   }
 
@@ -340,5 +398,7 @@ public with sharing class ScriptEditorController {
     public Id versionId { get; set; }
     @AuraEnabled
     public String pdfUrl { get; set; }
+    @AuraEnabled
+    public String downloadUrl { get; set; }
   }
 }

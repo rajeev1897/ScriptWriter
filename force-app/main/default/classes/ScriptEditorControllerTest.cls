@@ -355,6 +355,9 @@ private class ScriptEditorControllerTest {
     Assert.areEqual('Autosave Test.txt', response.fileName);
     Assert.isTrue(response.plainText.contains('First draft'));
     Assert.isNotNull(response.contentVersionId);
+    Assert.isTrue(
+      response.downloadUrl.contains('/sfc/servlet.shepherd/version/download/')
+    );
     Assert.areEqual(
       1,
       [
@@ -363,6 +366,52 @@ private class ScriptEditorControllerTest {
         WHERE Script__c = :script.Id AND Source__c = 'Export'
       ]
     );
+  }
+
+  @IsTest
+  static void exportPdfCreatesFileAndVersionSnapshot() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    ScriptEditorController.saveScript(
+      script.Id,
+      SCENE_CONTENT,
+      '{"schemaVersion":3,"mode":"screenplay"}',
+      4,
+      1,
+      'screenplay',
+      'Autosave',
+      null,
+      null
+    );
+
+    Test.startTest();
+    ScriptEditorController.ExportResponse response = ScriptEditorController.exportPdf(
+      script.Id
+    );
+    Test.stopTest();
+
+    Assert.areEqual('Autosave Test.pdf', response.fileName);
+    Assert.isNotNull(response.contentVersionId);
+    Assert.isNotNull(response.versionId);
+    Assert.isTrue(response.pdfUrl.contains('/apex/ScriptPdf?id='));
+    Assert.isTrue(
+      response.downloadUrl.contains('/sfc/servlet.shepherd/version/download/')
+    );
+
+    ContentVersion pdfVersion = [
+      SELECT PathOnClient, Title
+      FROM ContentVersion
+      WHERE Id = :response.contentVersionId
+    ];
+    Assert.isTrue(pdfVersion.PathOnClient.endsWith('.pdf'));
+
+    Script_Version__c exportVersion = [
+      SELECT Version_Label__c, Format_Metadata__c, Content_Version_Id__c
+      FROM Script_Version__c
+      WHERE Id = :response.versionId
+    ];
+    Assert.areEqual('PDF Export', exportVersion.Version_Label__c);
+    Assert.areEqual(response.contentVersionId, exportVersion.Content_Version_Id__c);
+    Assert.isTrue(exportVersion.Format_Metadata__c.contains('"exportType":"pdf"'));
   }
 
   @IsTest

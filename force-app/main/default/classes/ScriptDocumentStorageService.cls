@@ -94,6 +94,28 @@ public with sharing class ScriptDocumentStorageService {
     return version.Id;
   }
 
+  public static Id writePdfFile(
+    Id linkedEntityId,
+    String title,
+    Blob pdfBody
+  ) {
+    ContentVersion version = new ContentVersion();
+    version.Title = sanitizeTitle(title);
+    version.PathOnClient = sanitizeTitle(title) + '.pdf';
+    version.VersionData = pdfBody == null ? Blob.valueOf('') : pdfBody;
+    version.FirstPublishLocationId = linkedEntityId;
+    Database.insert(version, AccessLevel.SYSTEM_MODE);
+    return version.Id;
+  }
+
+  public static String contentVersionDownloadUrl(Id contentVersionId) {
+    if (contentVersionId == null) {
+      return null;
+    }
+    return '/sfc/servlet.shepherd/version/download/' +
+      String.valueOf(contentVersionId);
+  }
+
   public static String readLatestDocumentContent(Id contentDocumentId) {
     List<ContentVersion> versions = [
       SELECT VersionData

@@ -4,6 +4,7 @@ import loadScript from "@salesforce/apex/ScriptEditorController.loadScript";
 import saveScript from "@salesforce/apex/ScriptEditorController.saveScript";
 import importPlainText from "@salesforce/apex/ScriptEditorController.importPlainText";
 import exportPlainText from "@salesforce/apex/ScriptEditorController.exportPlainText";
+import exportPdf from "@salesforce/apex/ScriptEditorController.exportPdf";
 
 const AUTOSAVE_DELAY = 5000;
 
@@ -330,12 +331,27 @@ export default class ScriptEditor extends LightningElement {
     }
   }
 
-  handleDownloadPdf() {
+  async handleDownloadPdf() {
     if (this.isSaveDisabled) {
       return;
     }
-    const url = this.pdfUrl || `/apex/ScriptPdf?id=${this.recordId}`;
-    window.open(url, "_blank");
+
+    this.saveState = "saving";
+    this.saveMessage = "Preparing PDF…";
+
+    try {
+      const result = await exportPdf({ scriptId: this.recordId });
+      this.pdfUrl = result.pdfUrl || this.pdfUrl;
+      const url =
+        result.downloadUrl ||
+        this.pdfUrl ||
+        `/apex/ScriptPdf?id=${this.recordId}`;
+      window.open(url, "_blank");
+      this.saveState = "saved";
+      this.saveMessage = "Downloaded PDF";
+    } catch (error) {
+      this.showSaveError(error);
+    }
   }
 
   downloadBrowserFile(fileName, content, mimeType) {

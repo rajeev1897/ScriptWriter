@@ -12,52 +12,84 @@
         @page {
           size: letter;
           margin: 1in 1in 1in 1.5in;
+          @top-right {
+            content: counter(page);
+            font-family: "Courier New", Courier, monospace;
+            font-size: 12pt;
+          }
         }
         body {
           font-family: "Courier New", Courier, monospace;
           font-size: 12pt;
-          line-height: 1.2;
+          line-height: 1;
           color: #000;
         }
-        h1 {
-          font-size: 16pt;
+        .title-page {
           text-align: center;
-          margin: 0 0 24pt;
+          margin: 2.5in 0 1.5in;
+        }
+        .title-page h1 {
+          font-size: 16pt;
+          font-weight: normal;
+          text-transform: uppercase;
+          margin: 0;
+          letter-spacing: 0.04em;
         }
         .block {
           margin: 0 0 12pt;
           white-space: pre-wrap;
+          word-wrap: break-word;
         }
         .block-scene-heading {
           text-transform: uppercase;
           margin-top: 24pt;
+          margin-bottom: 12pt;
+        }
+        .block-action {
+          margin-left: 0;
+          width: 6in;
         }
         .block-character {
           text-transform: uppercase;
           margin-left: 2.2in;
+          margin-bottom: 0;
           width: 2.5in;
         }
         .block-dialogue {
           margin-left: 1in;
+          margin-bottom: 12pt;
           width: 3.5in;
         }
         .block-parenthetical {
           margin-left: 1.6in;
+          margin-bottom: 0;
           width: 2.5in;
         }
         .block-transition {
           text-align: right;
           text-transform: uppercase;
+          margin-left: 4in;
+          width: 2in;
+        }
+        .synopsis .title-page h1 {
+          text-transform: none;
+          letter-spacing: normal;
         }
         .synopsis .block {
           font-family: Georgia, "Times New Roman", serif;
           font-size: 12pt;
           line-height: 1.5;
+          width: auto;
+          margin-left: 0;
+          text-align: left;
+          text-transform: none;
         }
       </style>
     </head>
     <body class="{!IF(mode == 'synopsis', 'synopsis', 'screenplay')}">
-      <h1>{!title}</h1>
+      <div class="title-page">
+        <h1>{!title}</h1>
+      </div>
       <apex:repeat value="{!blocks}" var="block">
         <div class="{!block.cssClass}">{!block.value}</div>
       </apex:repeat>
