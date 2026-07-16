@@ -116,6 +116,104 @@ public with sharing class ScriptBlockPersistenceService {
     return result;
   }
 
+  /**
+   * Builds a schemaVersion 3 JSON snapshot from persisted scenes/blocks
+   * for ContentVersion versioning. Flat blocks remain for editor compatibility.
+   */
+  public static String buildVersionSnapshot(Id scriptId) {
+    List<Script__c> scripts = [
+      SELECT Id, Type__c
+      FROM Script__c
+      WHERE Id = :scriptId
+      WITH USER_MODE
+      LIMIT 1
+    ];
+    if (scripts.isEmpty()) {
+      return null;
+    }
+
+    String mode = scripts[0].Type__c == 'Synopsis' ? 'synopsis' : 'screenplay';
+
+    List<Script_Scene__c> scenes = [
+      SELECT
+        Id,
+        Sequence__c,
+        Scene_Heading__c,
+        Location__c,
+        Time_Of_Day__c,
+        Summary__c
+      FROM Script_Scene__c
+      WHERE Script__c = :scriptId
+      WITH USER_MODE
+      ORDER BY Sequence__c ASC, Id ASC
+    ];
+
+    List<Script_Block__c> blocks = [
+      SELECT
+        Id,
+        Block_Type__c,
+        Text__c,
+        Sequence__c,
+        Script_Scene__c,
+        Script_Scene__r.Sequence__c
+      FROM Script_Block__c
+      WHERE Script__c = :scriptId
+      WITH USER_MODE
+      ORDER BY Script_Scene__r.Sequence__c ASC, Sequence__c ASC, Id ASC
+    ];
+
+    Map<Id, List<Object>> blocksBySceneId = new Map<Id, List<Object>>();
+    List<Object> flatBlocks = new List<Object>();
+    for (Script_Block__c block : blocks) {
+      Map<String, Object> blockPayload = new Map<String, Object>{
+        'id' => String.valueOf(block.Id),
+        'type' => normalizeBlockType(block.Block_Type__c),
+        'value' => block.Text__c == null ? '' : block.Text__c,
+        'sequence' => Integer.valueOf(block.Sequence__c)
+      };
+      flatBlocks.add(
+        new Map<String, Object>{
+          'id' => blockPayload.get('id'),
+          'type' => blockPayload.get('type'),
+          'value' => blockPayload.get('value')
+        }
+      );
+      if (block.Script_Scene__c == null) {
+        continue;
+      }
+      if (!blocksBySceneId.containsKey(block.Script_Scene__c)) {
+        blocksBySceneId.put(block.Script_Scene__c, new List<Object>());
+      }
+      blocksBySceneId.get(block.Script_Scene__c).add(blockPayload);
+    }
+
+    List<Object> scenePayloads = new List<Object>();
+    for (Script_Scene__c scene : scenes) {
+      List<Object> sceneBlocks = blocksBySceneId.containsKey(scene.Id)
+        ? blocksBySceneId.get(scene.Id)
+        : new List<Object>();
+      scenePayloads.add(
+        new Map<String, Object>{
+          'sequence' => Integer.valueOf(scene.Sequence__c),
+          'heading' => scene.Scene_Heading__c,
+          'location' => scene.Location__c,
+          'timeOfDay' => scene.Time_Of_Day__c,
+          'summary' => scene.Summary__c,
+          'blocks' => sceneBlocks
+        }
+      );
+    }
+
+    return JSON.serialize(
+      new Map<String, Object>{
+        'schemaVersion' => 3,
+        'mode' => mode,
+        'scenes' => scenePayloads,
+        'blocks' => flatBlocks
+      }
+    );
+  }
+
   private static Datetime bumpScriptSavedAt(Id scriptId, String mode) {
     Datetime savedAt = System.now();
     Script__c script = new Script__c(

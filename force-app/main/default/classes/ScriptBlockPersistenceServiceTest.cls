@@ -99,6 +99,36 @@ private class ScriptBlockPersistenceServiceTest {
   }
 
   @IsTest
+  static void buildVersionSnapshotIncludesScenesAndSchemaVersion() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+    ScriptBlockPersistenceService.persistFullDocument(
+      script.Id,
+      MULTI_SCENE_CONTENT,
+      'screenplay'
+    );
+
+    Test.startTest();
+    String snapshot = ScriptBlockPersistenceService.buildVersionSnapshot(
+      script.Id
+    );
+    Test.stopTest();
+
+    Map<String, Object> document = (Map<String, Object>) JSON.deserializeUntyped(
+      snapshot
+    );
+    Assert.areEqual(3, Integer.valueOf(String.valueOf(document.get('schemaVersion'))));
+    Assert.areEqual('screenplay', document.get('mode'));
+    List<Object> scenes = (List<Object>) document.get('scenes');
+    List<Object> blocks = (List<Object>) document.get('blocks');
+    Assert.areEqual(2, scenes.size());
+    Assert.areEqual(4, blocks.size());
+    Map<String, Object> firstScene = (Map<String, Object>) scenes[0];
+    Assert.areEqual('INT. OFFICE - DAY', firstScene.get('heading'));
+    Assert.areEqual('OFFICE', firstScene.get('location'));
+    Assert.areEqual(2, ((List<Object>) firstScene.get('blocks')).size());
+  }
+
+  @IsTest
   static void autosaveWithoutDirtyBlocksCreatesNoVersion() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
 

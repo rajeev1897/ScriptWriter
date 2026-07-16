@@ -678,7 +678,7 @@ export default class ScriptEditor extends LightningElement {
         scriptId: recordId,
         content,
         formatMetadata: JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 3,
           mode: this.mode
         }),
         wordCount: this.wordCount,

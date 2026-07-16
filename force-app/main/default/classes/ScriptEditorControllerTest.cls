@@ -18,15 +18,15 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void manualSaveCreatesFileBackedDocumentAndSnapshot() {
+  static void manualSaveCreatesContentVersionSnapshotAndVersionRow() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
 
     Test.startTest();
     ScriptEditorController.SaveResponse response = ScriptEditorController.saveScript(
       script.Id,
-      FIRST_CONTENT,
-      '{"schemaVersion":2,"mode":"screenplay"}',
-      2,
+      SCENE_CONTENT,
+      '{"schemaVersion":3,"mode":"screenplay"}',
+      4,
       1,
       'screenplay',
       'Manual',
@@ -35,40 +35,44 @@ private class ScriptEditorControllerTest {
     );
     Test.stopTest();
 
-    Script_Document__c document = [
-      SELECT
-        Content__c,
-        Content_Document_Id__c,
-        Storage_Mode__c,
-        Format_Metadata__c,
-        Word_Count__c,
-        Page_Count__c
-      FROM Script_Document__c
-      WHERE Script__c = :script.Id
-    ];
-    Script_Version__c version = [
+    List<Script_Version__c> versions = [
       SELECT
         Content__c,
         Content_Version_Id__c,
         Format_Metadata__c,
         Saved_At__c,
-        Source__c
+        Source__c,
+        Version_Label__c
       FROM Script_Version__c
       WHERE Script__c = :script.Id
     ];
+    Assert.areEqual(1, versions.size());
+    Script_Version__c version = versions[0];
 
-    Assert.areEqual(document.Id, response.documentId);
     Assert.areEqual(version.Id, response.versionId);
-    Assert.areEqual('File', document.Storage_Mode__c);
-    Assert.isNotNull(document.Content_Document_Id__c);
+    Assert.areEqual(version.Content_Version_Id__c, response.contentVersionId);
     Assert.isNotNull(version.Content_Version_Id__c);
     Assert.areEqual('Manual', version.Source__c);
-    Assert.areEqual(2, document.Word_Count__c);
-    Assert.areEqual(1, document.Page_Count__c);
+    Assert.areEqual('Manual save', version.Version_Label__c);
     Assert.areEqual(
-      1,
+      0,
+      [SELECT COUNT() FROM Script_Document__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
+      2,
       [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
     );
+
+    ContentVersion snapshot = [
+      SELECT VersionData, PathOnClient
+      FROM ContentVersion
+      WHERE Id = :version.Content_Version_Id__c
+    ];
+    String snapshotJson = snapshot.VersionData.toString();
+    Assert.isTrue(snapshot.PathOnClient.endsWith('.json'));
+    Assert.isTrue(snapshotJson.contains('"schemaVersion":3'));
+    Assert.isTrue(snapshotJson.contains('"scenes"'));
+    Assert.isTrue(snapshotJson.contains('INT. OFFICE - DAY'));
   }
 
   @IsTest
@@ -77,7 +81,7 @@ private class ScriptEditorControllerTest {
     ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":2,"mode":"screenplay"}',
+      '{"schemaVersion":3,"mode":"screenplay"}',
       2,
       1,
       'screenplay',
@@ -90,7 +94,7 @@ private class ScriptEditorControllerTest {
     ScriptEditorController.SaveResponse response = ScriptEditorController.saveScript(
       script.Id,
       SECOND_CONTENT,
-      '{"schemaVersion":2,"mode":"synopsis"}',
+      '{"schemaVersion":3,"mode":"synopsis"}',
       2,
       1,
       'synopsis',
@@ -126,7 +130,7 @@ private class ScriptEditorControllerTest {
     ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":2,"mode":"screenplay"}',
+      '{"schemaVersion":3,"mode":"screenplay"}',
       2,
       1,
       'screenplay',
@@ -186,7 +190,7 @@ private class ScriptEditorControllerTest {
   }
 
   @IsTest
-  static void importPlainTextCreatesWorkingFileAndVersion() {
+  static void importPlainTextRebuildsBlocksAndCreatesImportVersion() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
     String plainText = 'INT. OFFICE - DAY\n\nMORGAN\nHello there.';
 
@@ -199,8 +203,9 @@ private class ScriptEditorControllerTest {
     );
     Test.stopTest();
 
-    Assert.isNotNull(response.documentId);
+    Assert.isNull(response.documentId);
     Assert.isNotNull(response.versionId);
+    Assert.isNotNull(response.contentVersionId);
     Assert.isTrue(response.content.contains('INT. OFFICE - DAY'));
     Assert.areEqual(
       1,
@@ -213,6 +218,17 @@ private class ScriptEditorControllerTest {
     Assert.isTrue(
       [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id] > 0
     );
+    Assert.areEqual(
+      0,
+      [SELECT COUNT() FROM Script_Document__c WHERE Script__c = :script.Id]
+    );
+    Assert.isTrue(
+      [
+          SELECT COUNT()
+          FROM ContentDocumentLink
+          WHERE LinkedEntityId = :script.Id
+        ] > 0
+    );
   }
 
   @IsTest
@@ -221,7 +237,7 @@ private class ScriptEditorControllerTest {
     ScriptEditorController.saveScript(
       script.Id,
       FIRST_CONTENT,
-      '{"schemaVersion":2,"mode":"screenplay"}',
+      '{"schemaVersion":3,"mode":"screenplay"}',
       2,
       1,
       'screenplay',

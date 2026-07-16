@@ -105,69 +105,20 @@ public with sharing class ScriptEditorController {
     response.content = persistResult.content;
     response.blockIdMap = persistResult.blockIdMap;
 
-    // Manual / Import / Export still write File snapshots until Agent 04
-    // migrates versioning fully onto block-backed ContentVersion payloads.
-    List<Script_Document__c> documents = [
-      SELECT Id, Content_Document_Id__c, Storage_Mode__c
-      FROM Script_Document__c
-      WHERE Script__c = :scriptId
-      WITH USER_MODE
-      ORDER BY LastModifiedDate DESC
-      LIMIT 1
-    ];
-
-    Script_Document__c document = documents.isEmpty()
-      ? new Script_Document__c(Script__c = scriptId)
-      : documents[0];
-
-    String snapshotContent = String.isBlank(persistResult.content)
-      ? content
-      : persistResult.content;
-
-    if (document.Id == null) {
-      document.Storage_Mode__c = 'File';
-      document.Format_Metadata__c = formatMetadata;
-      document.Word_Count__c = wordCount;
-      document.Page_Count__c = pageCount;
-      document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-        snapshotContent
-      );
-      Database.insert(document, AccessLevel.SYSTEM_MODE);
-      Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
-        document.Id,
-        null,
-        script.Name + ' Working Draft',
-        snapshotContent
-      );
-      document.Content_Document_Id__c = contentDocumentId;
-      Database.update(document, AccessLevel.SYSTEM_MODE);
-    } else {
-      Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
-        document.Id,
-        document.Content_Document_Id__c == null
-          ? null
-          : Id.valueOf(document.Content_Document_Id__c),
-        script.Name + ' Working Draft',
-        snapshotContent
-      );
-      document.Content_Document_Id__c = contentDocumentId;
-      document.Storage_Mode__c = 'File';
-      document.Format_Metadata__c = formatMetadata;
-      document.Word_Count__c = wordCount;
-      document.Page_Count__c = pageCount;
-      document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-        snapshotContent
-      );
-      Database.update(document, AccessLevel.SYSTEM_MODE);
-    }
-
-    response.documentId = document.Id;
-
     if (
       normalizedSaveSource == 'Manual' ||
       normalizedSaveSource == 'Import' ||
       normalizedSaveSource == 'Export'
     ) {
+      String snapshotContent = ScriptBlockPersistenceService.buildVersionSnapshot(
+        scriptId
+      );
+      if (String.isBlank(snapshotContent)) {
+        snapshotContent = String.isBlank(persistResult.content)
+          ? content
+          : persistResult.content;
+      }
+
       Id snapshotVersionId = ScriptDocumentStorageService.writeSnapshotContent(
         scriptId,
         script.Name + ' ' + normalizedSaveSource + ' Snapshot',
@@ -178,10 +129,21 @@ public with sharing class ScriptEditorController {
         Content__c = ScriptDocumentStorageService.truncateForLegacyField(
           snapshotContent
         ),
-        Format_Metadata__c = formatMetadata,
+        Format_Metadata__c = String.isBlank(formatMetadata)
+          ? JSON.serialize(
+              new Map<String, Object>{
+                'schemaVersion' => 3,
+                'mode' => mode,
+                'source' => normalizedSaveSource
+              }
+            )
+          : formatMetadata,
         Saved_At__c = persistResult.savedAt,
         Source__c = normalizedSaveSource,
-        Content_Version_Id__c = snapshotVersionId
+        Content_Version_Id__c = snapshotVersionId,
+        Version_Label__c = normalizedSaveSource == 'Manual'
+          ? 'Manual save'
+          : normalizedSaveSource
       );
       Database.insert(version, AccessLevel.SYSTEM_MODE);
       response.versionId = version.Id;
@@ -223,9 +185,9 @@ public with sharing class ScriptEditorController {
       content,
       JSON.serialize(
         new Map<String, Object>{
-          'schemaVersion' => 2,
+          'schemaVersion' => 3,
           'mode' => parsed.mode,
-          'storage' => 'File'
+          'source' => 'Import'
         }
       ),
       wordCount,
@@ -249,21 +211,26 @@ public with sharing class ScriptEditorController {
       plainText
     );
 
+    String snapshotContent = ScriptBlockPersistenceService.hasBlocks(scriptId)
+      ? ScriptBlockPersistenceService.buildVersionSnapshot(scriptId)
+      : loaded.content;
+
     Script_Version__c version = new Script_Version__c(
       Script__c = scriptId,
       Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-        loaded.content
+        snapshotContent
       ),
       Format_Metadata__c = JSON.serialize(
         new Map<String, Object>{
-          'schemaVersion' => 2,
+          'schemaVersion' => 3,
           'mode' => loaded.mode,
           'exportType' => 'txt'
         }
       ),
       Saved_At__c = System.now(),
       Source__c = 'Export',
-      Content_Version_Id__c = contentVersionId
+      Content_Version_Id__c = contentVersionId,
+      Version_Label__c = 'Export'
     );
     Database.insert(version, AccessLevel.SYSTEM_MODE);
 
