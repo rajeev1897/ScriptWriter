@@ -22,6 +22,12 @@
         <members>Script__c.Last_Saved_At__c</members>
         <members>Script__c.Status__c</members>
         <members>Script__c.Type__c</members>
+        <members>Script_Block__c.Block_Type__c</members>
+        <members>Script_Block__c.Format_Metadata__c</members>
+        <members>Script_Block__c.Script__c</members>
+        <members>Script_Block__c.Script_Scene__c</members>
+        <members>Script_Block__c.Sequence__c</members>
+        <members>Script_Block__c.Text__c</members>
         <members>Script_Document__c.Content__c</members>
         <members>Script_Document__c.Content_Document_Id__c</members>
         <members>Script_Document__c.Format_Metadata__c</members>
@@ -29,25 +35,36 @@
         <members>Script_Document__c.Script__c</members>
         <members>Script_Document__c.Storage_Mode__c</members>
         <members>Script_Document__c.Word_Count__c</members>
+        <members>Script_Scene__c.Location__c</members>
+        <members>Script_Scene__c.Scene_Heading__c</members>
+        <members>Script_Scene__c.Script__c</members>
+        <members>Script_Scene__c.Sequence__c</members>
+        <members>Script_Scene__c.Summary__c</members>
+        <members>Script_Scene__c.Time_Of_Day__c</members>
         <members>Script_Version__c.Content__c</members>
         <members>Script_Version__c.Content_Version_Id__c</members>
         <members>Script_Version__c.Format_Metadata__c</members>
         <members>Script_Version__c.Saved_At__c</members>
         <members>Script_Version__c.Script__c</members>
         <members>Script_Version__c.Source__c</members>
+        <members>Script_Version__c.Version_Label__c</members>
         <members>Test_Object__c.Account__c</members>
         <members>Test_Object__c.Test_field__c</members>
         <name>CustomField</name>
     </types>
     <types>
         <members>Script__c</members>
+        <members>Script_Block__c</members>
         <members>Script_Document__c</members>
+        <members>Script_Scene__c</members>
         <members>Script_Version__c</members>
         <name>CustomObject</name>
     </types>
     <types>
         <members>Script__c.All</members>
+        <members>Script_Block__c.All</members>
         <members>Script_Document__c.All</members>
+        <members>Script_Scene__c.All</members>
         <members>Script_Version__c.All</members>
         <name>ListView</name>
     </types>
@@ -57,6 +74,8 @@
     </types>
     <types>
         <members>Script__c-Script Layout</members>
+        <members>Script_Block__c-Script Block Layout</members>
+        <members>Script_Scene__c-Script Scene Layout</members>
         <name>Layout</name>
     </types>
     <types>
@@ -69,8 +88,10 @@
     </types>
     <types>
         <members>Script__c</members>
+        <members>Script_Block__c</members>
         <members>Script_Document__c</members>
         <members>Script_Editor</members>
+        <members>Script_Scene__c</members>
         <members>Script_Version__c</members>
         <name>CustomTab</name>
     </types>

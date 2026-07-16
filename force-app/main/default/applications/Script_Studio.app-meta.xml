@@ -8,6 +8,8 @@
     <tabs>standard-home</tabs>
     <tabs>Script_Editor</tabs>
     <tabs>Script__c</tabs>
+    <tabs>Script_Scene__c</tabs>
+    <tabs>Script_Block__c</tabs>
     <tabs>Script_Document__c</tabs>
     <tabs>Script_Version__c</tabs>
     <uiType>Lightning</uiType>

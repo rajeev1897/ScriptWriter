@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Script__c</fullName>
+    <label>Script</label>
+    <referenceTo>Script__c</referenceTo>
+    <relationshipLabel>Scenes</relationshipLabel>
+    <relationshipName>Scenes</relationshipName>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <trackHistory>false</trackHistory>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>
