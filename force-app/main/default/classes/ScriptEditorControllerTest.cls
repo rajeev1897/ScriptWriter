@@ -2,6 +2,11 @@
 private class ScriptEditorControllerTest {
   private static final String FIRST_CONTENT = '{"mode":"screenplay","blocks":[{"id":1,"type":"action","value":"First draft"}]}';
   private static final String SECOND_CONTENT = '{"mode":"synopsis","blocks":[{"id":1,"type":"action","value":"Revised draft"}]}';
+  private static final String SCENE_CONTENT =
+    '{"mode":"screenplay","blocks":[' +
+    '{"id":1,"type":"scene-heading","value":"INT. OFFICE - DAY"},' +
+    '{"id":2,"type":"action","value":"First draft"}' +
+    ']}';
 
   @TestSetup
   static void createScript() {
@@ -24,7 +29,9 @@ private class ScriptEditorControllerTest {
       2,
       1,
       'screenplay',
-      'Manual'
+      'Manual',
+      null,
+      null
     );
     Test.stopTest();
 
@@ -54,18 +61,18 @@ private class ScriptEditorControllerTest {
     Assert.areEqual(version.Id, response.versionId);
     Assert.areEqual('File', document.Storage_Mode__c);
     Assert.isNotNull(document.Content_Document_Id__c);
-    Assert.areEqual(
-      FIRST_CONTENT,
-      ScriptDocumentStorageService.readWorkingContent(document)
-    );
     Assert.isNotNull(version.Content_Version_Id__c);
     Assert.areEqual('Manual', version.Source__c);
     Assert.areEqual(2, document.Word_Count__c);
     Assert.areEqual(1, document.Page_Count__c);
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
+    );
   }
 
   @IsTest
-  static void autosaveDoesNotCreateVersionButUpdatesWorkingFile() {
+  static void autosavePersistsBlocksWithoutCreatingVersion() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
     ScriptEditorController.saveScript(
       script.Id,
@@ -74,43 +81,47 @@ private class ScriptEditorControllerTest {
       2,
       1,
       'screenplay',
-      'Autosave'
+      'Autosave',
+      null,
+      null
     );
 
     Test.startTest();
-    ScriptEditorController.saveScript(
+    ScriptEditorController.SaveResponse response = ScriptEditorController.saveScript(
       script.Id,
       SECOND_CONTENT,
       '{"schemaVersion":2,"mode":"synopsis"}',
       2,
       1,
       'synopsis',
-      'Autosave'
+      'Autosave',
+      null,
+      null
     );
     Test.stopTest();
 
-    Script_Document__c document = [
-      SELECT Content_Document_Id__c, Storage_Mode__c
-      FROM Script_Document__c
-      WHERE Script__c = :script.Id
-    ];
-    Assert.areEqual('File', document.Storage_Mode__c);
-    Assert.areEqual(
-      SECOND_CONTENT,
-      ScriptDocumentStorageService.readWorkingContent(document)
-    );
+    Assert.isNotNull(response.savedAt);
+    Assert.isTrue(response.content.contains('Revised draft'));
     Assert.areEqual(
       0,
       [SELECT COUNT() FROM Script_Version__c WHERE Script__c = :script.Id]
     );
     Assert.areEqual(
+      0,
+      [SELECT COUNT() FROM Script_Document__c WHERE Script__c = :script.Id]
+    );
+    Assert.areEqual(
       'Synopsis',
       [SELECT Type__c FROM Script__c WHERE Id = :script.Id].Type__c
+    );
+    Assert.areEqual(
+      1,
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id]
     );
   }
 
   @IsTest
-  static void loadReturnsFileBackedDocument() {
+  static void loadPrefersBlocksOverFileDocument() {
     Script__c script = [SELECT Id FROM Script__c LIMIT 1];
     ScriptEditorController.saveScript(
       script.Id,
@@ -119,7 +130,14 @@ private class ScriptEditorControllerTest {
       2,
       1,
       'screenplay',
-      'Autosave'
+      'Manual',
+      null,
+      null
+    );
+    ScriptBlockPersistenceService.persistFullDocument(
+      script.Id,
+      SCENE_CONTENT,
+      'screenplay'
     );
 
     Test.startTest();
@@ -130,8 +148,41 @@ private class ScriptEditorControllerTest {
 
     Assert.areEqual('Autosave Test', response.title);
     Assert.areEqual('screenplay', response.mode);
-    Assert.areEqual(FIRST_CONTENT, response.content);
+    Assert.isTrue(response.content.contains('INT. OFFICE - DAY'));
+    Assert.isTrue(response.content.contains('First draft'));
     Assert.isTrue(response.pdfUrl.contains('/apex/ScriptPdf?id='));
+  }
+
+  @IsTest
+  static void loadReturnsFileBackedDocumentWhenNoBlocks() {
+    Script__c script = [SELECT Id FROM Script__c LIMIT 1];
+
+    Script_Document__c document = new Script_Document__c(
+      Script__c = script.Id,
+      Storage_Mode__c = 'File',
+      Content__c = FIRST_CONTENT,
+      Word_Count__c = 2,
+      Page_Count__c = 1
+    );
+    insert document;
+    Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
+      document.Id,
+      null,
+      'Legacy Working Draft',
+      FIRST_CONTENT
+    );
+    document.Content_Document_Id__c = contentDocumentId;
+    update document;
+
+    Test.startTest();
+    ScriptEditorController.LoadResponse response = ScriptEditorController.loadScript(
+      script.Id
+    );
+    Test.stopTest();
+
+    Assert.areEqual('Autosave Test', response.title);
+    Assert.areEqual('screenplay', response.mode);
+    Assert.areEqual(FIRST_CONTENT, response.content);
   }
 
   @IsTest
@@ -159,6 +210,9 @@ private class ScriptEditorControllerTest {
         WHERE Script__c = :script.Id AND Source__c = 'Import'
       ]
     );
+    Assert.isTrue(
+      [SELECT COUNT() FROM Script_Block__c WHERE Script__c = :script.Id] > 0
+    );
   }
 
   @IsTest
@@ -171,7 +225,9 @@ private class ScriptEditorControllerTest {
       2,
       1,
       'screenplay',
-      'Autosave'
+      'Autosave',
+      null,
+      null
     );
 
     Test.startTest();

@@ -16,6 +16,19 @@ public with sharing class ScriptEditorController {
       throw handledException('The script could not be found or accessed.');
     }
 
+    LoadResponse response = new LoadResponse();
+    response.title = scripts[0].Name;
+    response.mode = scripts[0].Type__c == 'Synopsis'
+      ? 'synopsis'
+      : 'screenplay';
+    response.savedAt = scripts[0].Last_Saved_At__c;
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
+
+    if (ScriptBlockPersistenceService.hasBlocks(scriptId)) {
+      response.content = ScriptBlockPersistenceService.loadDocument(scriptId);
+      return response;
+    }
+
     List<Script_Document__c> documents = [
       SELECT
         Content__c,
@@ -29,16 +42,9 @@ public with sharing class ScriptEditorController {
       LIMIT 1
     ];
 
-    LoadResponse response = new LoadResponse();
-    response.title = scripts[0].Name;
-    response.mode = scripts[0].Type__c == 'Synopsis'
-      ? 'synopsis'
-      : 'screenplay';
-    response.savedAt = scripts[0].Last_Saved_At__c;
     response.content = documents.isEmpty()
       ? null
       : ScriptDocumentStorageService.readWorkingContent(documents[0]);
-    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
     return response;
   }
 
@@ -50,7 +56,9 @@ public with sharing class ScriptEditorController {
     Integer wordCount,
     Integer pageCount,
     String mode,
-    String saveSource
+    String saveSource,
+    String dirtyBlocks,
+    String deletedBlockIds
   ) {
     validateScriptId(scriptId);
     validatePayload(content, formatMetadata, wordCount, pageCount, mode);
@@ -68,12 +76,37 @@ public with sharing class ScriptEditorController {
       throw handledException('The script could not be found or accessed.');
     }
 
-    Datetime savedAt = System.now();
     Script__c script = scripts[0];
-    script.Last_Saved_At__c = savedAt;
-    script.Type__c = mode == 'synopsis' ? 'Synopsis' : 'Screenplay';
-    Database.update(script, AccessLevel.USER_MODE);
+    SaveResponse response = new SaveResponse();
+    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
 
+    if (normalizedSaveSource == 'Autosave') {
+      ScriptBlockPersistenceService.PersistResult persistResult = ScriptBlockPersistenceService.autosaveBlocks(
+        scriptId,
+        content,
+        dirtyBlocks,
+        deletedBlockIds,
+        mode,
+        wordCount,
+        pageCount
+      );
+      response.savedAt = persistResult.savedAt;
+      response.content = persistResult.content;
+      response.blockIdMap = persistResult.blockIdMap;
+      return response;
+    }
+
+    ScriptBlockPersistenceService.PersistResult persistResult = ScriptBlockPersistenceService.persistFullDocument(
+      scriptId,
+      content,
+      mode
+    );
+    response.savedAt = persistResult.savedAt;
+    response.content = persistResult.content;
+    response.blockIdMap = persistResult.blockIdMap;
+
+    // Manual / Import / Export still write File snapshots until Agent 04
+    // migrates versioning fully onto block-backed ContentVersion payloads.
     List<Script_Document__c> documents = [
       SELECT Id, Content_Document_Id__c, Storage_Mode__c
       FROM Script_Document__c
@@ -87,20 +120,24 @@ public with sharing class ScriptEditorController {
       ? new Script_Document__c(Script__c = scriptId)
       : documents[0];
 
+    String snapshotContent = String.isBlank(persistResult.content)
+      ? content
+      : persistResult.content;
+
     if (document.Id == null) {
       document.Storage_Mode__c = 'File';
       document.Format_Metadata__c = formatMetadata;
       document.Word_Count__c = wordCount;
       document.Page_Count__c = pageCount;
       document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-        content
+        snapshotContent
       );
       Database.insert(document, AccessLevel.SYSTEM_MODE);
       Id contentDocumentId = ScriptDocumentStorageService.writeWorkingContent(
         document.Id,
         null,
         script.Name + ' Working Draft',
-        content
+        snapshotContent
       );
       document.Content_Document_Id__c = contentDocumentId;
       Database.update(document, AccessLevel.SYSTEM_MODE);
@@ -111,7 +148,7 @@ public with sharing class ScriptEditorController {
           ? null
           : Id.valueOf(document.Content_Document_Id__c),
         script.Name + ' Working Draft',
-        content
+        snapshotContent
       );
       document.Content_Document_Id__c = contentDocumentId;
       document.Storage_Mode__c = 'File';
@@ -119,16 +156,12 @@ public with sharing class ScriptEditorController {
       document.Word_Count__c = wordCount;
       document.Page_Count__c = pageCount;
       document.Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-        content
+        snapshotContent
       );
       Database.update(document, AccessLevel.SYSTEM_MODE);
     }
 
-    SaveResponse response = new SaveResponse();
     response.documentId = document.Id;
-    response.savedAt = savedAt;
-    response.content = content;
-    response.pdfUrl = '/apex/ScriptPdf?id=' + String.valueOf(scriptId);
 
     if (
       normalizedSaveSource == 'Manual' ||
@@ -138,15 +171,15 @@ public with sharing class ScriptEditorController {
       Id snapshotVersionId = ScriptDocumentStorageService.writeSnapshotContent(
         scriptId,
         script.Name + ' ' + normalizedSaveSource + ' Snapshot',
-        content
+        snapshotContent
       );
       Script_Version__c version = new Script_Version__c(
         Script__c = scriptId,
         Content__c = ScriptDocumentStorageService.truncateForLegacyField(
-          content
+          snapshotContent
         ),
         Format_Metadata__c = formatMetadata,
-        Saved_At__c = savedAt,
+        Saved_At__c = persistResult.savedAt,
         Source__c = normalizedSaveSource,
         Content_Version_Id__c = snapshotVersionId
       );
@@ -198,7 +231,9 @@ public with sharing class ScriptEditorController {
       wordCount,
       pageCount,
       parsed.mode,
-      'Import'
+      'Import',
+      null,
+      null
     );
   }
 
@@ -326,6 +361,8 @@ public with sharing class ScriptEditorController {
     public String pdfUrl { get; set; }
     @AuraEnabled
     public String content { get; set; }
+    @AuraEnabled
+    public Map<String, String> blockIdMap { get; set; }
   }
 
   public class ExportResponse {
